@@ -7,6 +7,8 @@ it. One short line per change, no jargon — this is what the update prompt show
 
 - A Simple layout for new commanders: your agents as cards, with Approvals and Settings; switch to Advanced in Settings
 - Existing setups keep the Advanced layout
+- Smoother pages and sidebar, and running agents' status dots gently pulse (they follow your desktop's animation setting)
+- The Board's summary line no longer runs under the New agent button in a narrow window
 
 ## 0.1.0
 

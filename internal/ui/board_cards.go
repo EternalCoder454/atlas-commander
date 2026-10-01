@@ -108,7 +108,9 @@ func cardColumns(w int) int {
 func (b *boardPage) newCard(a *fleet.AgentView) *agentCard {
 	c := &agentCard{id: a.ID, f: qt.NewQFrame2()}
 	setProp(c.f.QWidget, "card", true)
-	c.f.SetCursor(qt.NewQCursor2(qt.PointingHandCursor))
+	hand := qt.NewQCursor2(qt.PointingHandCursor)
+	c.f.SetCursor(hand)
+	hand.Delete()
 	c.f.OnMousePressEvent(func(super func(*qt.QMouseEvent), ev *qt.QMouseEvent) {
 		super(ev)
 		if ev.Button() == qt.LeftButton {
@@ -242,10 +244,12 @@ func (b *boardPage) refreshCards() {
 
 // placeCards puts the cards in the grid in b.cardWanted order. It does
 // nothing when neither the order nor the column count changed, so the 250 ms
-// tick never moves a widget.
+// tick never moves a widget. A resize that keeps the column count still
+// changes the card width, so it refits the text without moving anything.
 func (b *boardPage) placeCards(orderChanged bool) {
 	cols := cardColumns(b.cardScroll.Viewport().Width())
 	if !orderChanged && cols == b.cardCols {
+		b.refitCards(cols)
 		return
 	}
 	for _, id := range b.cardPlaced {
@@ -271,8 +275,18 @@ func (b *boardPage) placeCards(orderChanged bool) {
 	b.cardPlaced = slices.Clone(b.cardWanted)
 	b.cardCols = cols
 
-	// Cards changed width, so text elided for the old width is stale.
+	b.refitCards(cols)
+}
+
+// refitCards re-elides every card's text when the room inside a card has
+// changed since it was last fitted. Cards first built while the board was
+// hidden were fitted to a viewport that had not been laid out yet.
+func (b *boardPage) refitCards(cols int) {
 	w := b.cardInnerWidth(cols)
+	if w == b.cardTextW {
+		return
+	}
+	b.cardTextW = w
 	for _, c := range b.cards {
 		b.fitCardText(c, w)
 	}

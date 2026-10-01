@@ -170,6 +170,9 @@ type boardPage struct {
 	cardPlaced []string              // ids in the grid, in order
 	cardWanted []string
 	cardCols   int
+	cardTextW  int // inner card width the card text was last fitted to
+
+	pulse *pulseState // the status-dot halo timer; see board_pulse.go
 }
 
 func newBoardPage(a *App) *boardPage {
@@ -181,8 +184,14 @@ func newBoardPage(a *App) *boardPage {
 	top.AddWidget(pageTitle("Board").QWidget)
 	b.summary = newLiveLabel("")
 	setProp(b.summary.L.QWidget, "caption", true)
-	top.AddWidget(b.summary.L.QWidget)
-	top.AddStretch()
+	// In a narrow window the summary ends in an ellipsis instead of running
+	// under the New agent button; the full line is in its tooltip.
+	b.summary.L.SetSizePolicy2(qt.QSizePolicy__Ignored, qt.QSizePolicy__Preferred)
+	b.summary.L.OnResizeEvent(func(super func(*qt.QResizeEvent), ev *qt.QResizeEvent) {
+		super(ev)
+		b.fitSummary()
+	})
+	top.AddWidget2(b.summary.L.QWidget, 1)
 	add := qt.NewQPushButton3("New agent")
 	setProp(add.QWidget, "accent", true)
 	add.SetToolTip("Register an agent in a fleet")
@@ -613,7 +622,10 @@ func (b *boardPage) refresh(s *fleet.Snapshot) {
 	if approval > 0 {
 		parts = append(parts, fmt.Sprintf("%d need approval", approval))
 	}
-	b.summary.Set(strings.Join(parts, " · "))
+	if line := strings.Join(parts, " · "); line != b.summary.last {
+		b.summary.Set(line)
+		b.fitSummary()
+	}
 
 	rows := make([]fleet.AgentView, 0, len(s.Agents))
 	for _, a := range s.Agents {
@@ -772,4 +784,16 @@ func (b *boardPage) paintSpark(p *qt.QPainter, v []float64, x, y, w, h float64) 
 	p.DrawPath(line)
 	pen.Delete()
 	lc.Delete()
+}
+
+// fitSummary elides the board summary to the label's width.
+func (b *boardPage) fitSummary() {
+	l, full := b.summary.L, b.summary.last
+	shown := l.FontMetrics().ElidedText(full, qt.ElideRight, l.Width())
+	l.SetText(shown)
+	tip := ""
+	if shown != full {
+		tip = full
+	}
+	l.SetToolTip(tip)
 }

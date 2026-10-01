@@ -49,15 +49,12 @@ func pulses(st fleet.Status) bool {
 	return st == fleet.StatusRunning || st == fleet.StatusApproval
 }
 
-// pulseState is a board's pulse timer and whether halos are drawn now. It is
-// kept beside the page rather than in it so the page struct stays as it is.
+// pulseState is a board's pulse timer and whether halos are drawn now.
 type pulseState struct {
 	timer *qt.QTimer
 	on    bool // halos are being drawn; set by the timer, read by paintCell
 	fast  bool // the timer is at frame rate rather than at the slow check
 }
-
-var pulseStates = map[*boardPage]*pulseState{}
 
 // startPulse arms the board's pulse timer. The timer idles at 4 Hz doing a
 // few comparisons and speeds up to frame rate only while the board is the
@@ -65,7 +62,7 @@ var pulseStates = map[*boardPage]*pulseState{}
 // and at least one visible row is running or waiting for approval.
 func (b *boardPage) startPulse() {
 	ps := &pulseState{timer: qt.NewQTimer2(b.w.QObject)}
-	pulseStates[b] = ps
+	b.pulse = ps
 	ps.timer.OnTimeout(func() { b.pulseTick(ps) })
 	ps.timer.Start(pulseGateMs)
 }
@@ -159,7 +156,7 @@ func cardDotVisible(c *agentCard) bool {
 // paintHalo draws the ring for one status dot centred on (cx, cy), clipped to
 // the cell so a tall ring never spills onto the next row.
 func (b *boardPage) paintHalo(p *qt.QPainter, st fleet.Status, c rgb, cx, cy float64, clip [4]int) {
-	ps := pulseStates[b]
+	ps := b.pulse
 	if ps == nil || !ps.on || !pulses(st) {
 		return
 	}
