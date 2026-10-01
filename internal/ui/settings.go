@@ -864,11 +864,14 @@ func (p *settingsPage) aboutCards() {
 		{"Audit log", paths.Database()},
 		{"Worktrees", paths.Worktrees()},
 	} {
-		l := qt.NewQLabel3(shortPath(r.path))
-		setProp(l.QWidget, "mono", true)
-		setProp(l.QWidget, "caption", true)
-		l.SetTextInteractionFlags(qt.TextSelectableByMouse)
-		c.sub(r.title, "", l.QWidget)
+		// The path is the row's description, which wraps at its separators
+		// across the row's width. As a control at the end of the row it was as
+		// wide as its text, and a long one (a data folder set by
+		// ATLAS_DATA_HOME, a deep Windows profile) pushed the whole page past
+		// the window's edge.
+		row := c.sub(r.title, shortPath(r.path))
+		setProp(row.sub.QWidget, "mono", true)
+		row.sub.SetTextInteractionFlags(qt.TextSelectableByMouse)
 	}
 }
 

@@ -12,6 +12,7 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Menus and dropdown lists have rounded corners, and dropdowns open below the choice
 - The Dispatch to… button shows a proper arrow
 - Kill all no longer keeps a focus outline after you click it
+- Settings no longer runs off the right edge when Commander keeps its files in a long folder path
 
 ## 0.1.0
 
