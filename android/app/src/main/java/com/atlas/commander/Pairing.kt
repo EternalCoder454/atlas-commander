@@ -23,6 +23,26 @@ data class Pairing(
 /** Parsing of the `atlascommander://pair?...` link (docs/phone-api.md). */
 object PairingLink {
 	private val hexPin = Regex("^[0-9a-f]{64}$")
+	private val tokenForm = Regex("^[A-Za-z0-9_-]{16,128}$")
+	private val dnsName = Regex("^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+	private val ipv6 = Regex("^\\[[0-9A-Fa-f:.]{2,45}]$")
+	private const val MAX_HOSTS = 8
+	private const val MAX_NAME = 64
+
+	/**
+	 * Whether [h] is exactly host:port with a plain host (IPv4, DNS name or a
+	 * bracketed IPv6) and a port of 1..65535. Anything else could smuggle a
+	 * userinfo, path or query into the URL the app builds from it.
+	 */
+	fun validHost(h: String): Boolean {
+		val i = h.lastIndexOf(':')
+		if (i <= 0) return false
+		val host = h.substring(0, i)
+		val port = h.substring(i + 1)
+		if (port.length !in 1..5 || !port.all { it in '0'..'9' }) return false
+		if (port.toInt() !in 1..65535) return false
+		return host.length <= 253 && (ipv6.matches(host) || dnsName.matches(host))
+	}
 
 	/** Returns the pairing, or null when the text is not a usable link. */
 	fun parse(text: String): Pairing? {
@@ -47,8 +67,11 @@ object PairingLink {
 		// The fingerprint is compared as lowercase hex, so it is normalised here.
 		val fp = q["f"].orEmpty().lowercase()
 		val hosts = q["h"].orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-		if (token.isEmpty() || !hexPin.matches(fp) || hosts.isEmpty()) return null
-		val name = q["n"].orEmpty().ifBlank { hosts.first() }
+		if (!tokenForm.matches(token) || !hexPin.matches(fp)) return null
+		if (hosts.isEmpty() || hosts.size > MAX_HOSTS || !hosts.all { validHost(it) }) return null
+		// The name is shown in dialogs and notifications, so it is capped and
+		// stripped of control characters.
+		val name = q["n"].orEmpty().filter { !Character.isISOControl(it) }.trim().take(MAX_NAME).ifBlank { hosts.first() }
 		return Pairing(name, hosts, token, fp)
 	}
 }
@@ -88,6 +111,16 @@ class Store(context: Context) {
 	fun clear() {
 		p.edit().clear().apply()
 	}
+
+	/**
+	 * The token of the pairing for which the user refused the notification
+	 * permission, so the app does not ask again on every foreground.
+	 */
+	var notifDeniedFor: String
+		get() = p.getString("notif_denied_for", "").orEmpty()
+		set(v) {
+			p.edit().putString("notif_denied_for", v).apply()
+		}
 
 	/** On by default once paired. */
 	var notify: Boolean

@@ -45,7 +45,11 @@ class PinTrustManager(private val pin: String) : X509TrustManager {
 }
 
 /** Client for the phone API (docs/phone-api.md). Blocking: call it off the main thread. */
-class ApiClient(private var pairing: Pairing, private val onHostWorked: (String) -> Unit = {}) {
+class ApiClient(
+	private var pairing: Pairing,
+	private val timeoutMs: Int = 5000,
+	private val onHostWorked: (String) -> Unit = {},
+) {
 	private val socketFactory: SSLSocketFactory = SSLContext.getInstance("TLS").also {
 		it.init(null, arrayOf(PinTrustManager(pairing.fingerprint)), null)
 	}.socketFactory
@@ -82,6 +86,7 @@ class ApiClient(private var pairing: Pairing, private val onHostWorked: (String)
 				} catch (_: Exception) {
 					JSONObject()
 				}
+				// Redirects are never followed (see open), so a 3xx is an error.
 				if (status !in 200..299) {
 					throw ApiException(status, json.s("error").ifBlank { "The PC answered with error $status." })
 				}
@@ -102,8 +107,10 @@ class ApiClient(private var pairing: Pairing, private val onHostWorked: (String)
 		val c = URL("https://$host/api/v1$path").openConnection() as HttpsURLConnection
 		c.sslSocketFactory = socketFactory
 		c.hostnameVerifier = verifier
-		c.connectTimeout = 5000
-		c.readTimeout = 5000
+		// A redirect could carry the bearer token to another address.
+		c.instanceFollowRedirects = false
+		c.connectTimeout = timeoutMs
+		c.readTimeout = timeoutMs
 		c.requestMethod = method
 		c.setRequestProperty("Authorization", "Bearer ${pairing.token}")
 		c.setRequestProperty("Accept", "application/json")

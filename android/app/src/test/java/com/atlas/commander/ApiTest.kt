@@ -16,11 +16,11 @@ class PairingLinkTest {
 	@Test
 	fun parsesTheDocExampleLink() {
 		// The phone must read exactly what the PC writes, including encoded names.
-		val p = PairingLink.parse("atlascommander://pair?v=1&n=zach%20pc&h=192.168.1.5%3A47821%2C100.64.0.2%3A47821&t=abc_-123&f=$FP")
+		val p = PairingLink.parse("atlascommander://pair?v=1&n=zach%20pc&h=192.168.1.5%3A47821%2C100.64.0.2%3A47821&t=abc_-123abc_-123&f=$FP")
 		assertNotNull(p)
 		assertEquals("zach pc", p!!.name)
 		assertEquals(listOf("192.168.1.5:47821", "100.64.0.2:47821"), p.hosts)
-		assertEquals("abc_-123", p.token)
+		assertEquals("abc_-123abc_-123", p.token)
 		assertEquals(FP, p.fingerprint)
 	}
 
@@ -33,6 +33,46 @@ class PairingLinkTest {
 		assertNull(PairingLink.parse("atlascommander://pair?v=1&h=a:1&f=$FP"))
 		assertNull(PairingLink.parse("atlascommander://pair?v=1&t=x&f=$FP"))
 		assertNull(PairingLink.parse("not a link"))
+	}
+
+	private val goodToken = "abcdefghijklmnop"
+
+	private fun link(h: String, t: String = goodToken) =
+		PairingLink.parse("atlascommander://pair?v=1&n=pc&h=${java.net.URLEncoder.encode(h, "UTF-8")}&t=$t&f=$FP")
+
+	@Test
+	fun rejectsHostsThatAreNotPlainHostAndPort() {
+		// A host with userinfo, a path or a query would change where the token is sent.
+		for (h in listOf("a@b:1", "x/..:1", "h:1?x", "h:0", "h:70000", "h", ":1", "h:1x", "[::1:1")) {
+			assertNull("host $h", link(h))
+		}
+	}
+
+	@Test
+	fun acceptsIpv4Ipv6AndDnsHosts() {
+		// The PC lists LAN, Tailscale and IPv6 addresses; all must pass.
+		assertNotNull(link("[fd00::1]:47821"))
+		assertNotNull(link("192.168.1.5:47821"))
+		assertNotNull(link("pc.local:47821"))
+	}
+
+	@Test
+	fun rejectsBadTokensAndTooManyHosts() {
+		// Tokens are random URL-safe text of known length; anything else is not from Commander.
+		assertNull(link("a:1", "short"))
+		assertNull(link("a:1", "abcdefghijklmnop%20"))
+		assertNull(link("a:1", "a".repeat(129)))
+		assertNull(link((1..9).joinToString(",") { "h$it:1" }))
+		assertNotNull(link((1..8).joinToString(",") { "h$it:1" }))
+	}
+
+	@Test
+	fun capsAndCleansTheName() {
+		// The name is shown in dialogs, so control characters and length are limited.
+		val n = "a\u0007b" + "c".repeat(100)
+		val p = PairingLink.parse("atlascommander://pair?v=1&n=${java.net.URLEncoder.encode(n, "UTF-8")}&h=a:1&t=$goodToken&f=$FP")
+		assertEquals(64, p!!.name.length)
+		assertFalse(p.name.contains('\u0007'))
 	}
 
 	@Test

@@ -75,6 +75,10 @@ class AppModel(private val context: Context) {
 	var notifyEnabled by mutableStateOf(store.notify)
 		private set
 
+	/** A pairing link that arrived from outside the app and awaits the user's tap. */
+	var pendingLink by mutableStateOf<Pairing?>(null)
+		private set
+
 	private var client: ApiClient? = null
 
 	val needsPairing get() = pairing == null || repairMessage != null
@@ -83,7 +87,7 @@ class AppModel(private val context: Context) {
 
 	fun api(): ApiClient? {
 		val p = pairing ?: return null
-		return client ?: ApiClient(p) { host -> store.rememberHost(host) }.also { client = it }
+		return client ?: ApiClient(p, onHostWorked = { host -> store.rememberHost(host) }).also { client = it }
 	}
 
 	/** One refresh of /state. Safe to call from the main thread. */
@@ -91,12 +95,15 @@ class AppModel(private val context: Context) {
 		val c = api() ?: return
 		try {
 			val s = withContext(Dispatchers.IO) { c.state() }
+			// The pairing may have changed while the call was in flight; an
+			// answer from the old client must not land on the new state.
+			if (client !== c) return
 			state = s
 			error = null
 		} catch (e: ApiException) {
-			handle(e)
+			if (client === c) handle(e)
 		} catch (e: Exception) {
-			error = failText(pcName(), e)
+			if (client === c) error = failText(pcName(), e)
 		}
 	}
 
@@ -116,9 +123,11 @@ class AppModel(private val context: Context) {
 			try {
 				withContext(Dispatchers.IO) { c.call() }
 			} catch (e: ApiException) {
-				if (e.unauthorized) handle(e) else toast = e.message
+				if (client === c) {
+					if (e.unauthorized) handle(e) else toast = e.message
+				}
 			} catch (e: Exception) {
-				toast = failText(pcName(), e)
+				if (client === c) toast = failText(pcName(), e)
 			}
 			refresh()
 		}
@@ -126,19 +135,48 @@ class AppModel(private val context: Context) {
 
 	fun killAll() = act { killAll() }
 
-	/** Pairs from pasted or scanned text: validates the link, pings, saves. */
+	/**
+	 * A link opened from outside the app (a browser, a message) is only parsed
+	 * here; pairing waits for the user to confirm, because it replaces any
+	 * existing pairing.
+	 */
+	fun offerLink(text: String) {
+		val p = PairingLink.parse(text)
+		if (p == null) {
+			pairError = "That isn't a Commander pairing link."
+			return
+		}
+		pendingLink = p
+	}
+
+	fun confirmLink() {
+		val p = pendingLink ?: return
+		pendingLink = null
+		pair(p)
+	}
+
+	fun dismissLink() {
+		pendingLink = null
+	}
+
+	/** Pairs from pasted or scanned text, where the user is acting directly. */
 	fun pairFromText(text: String) {
 		val p = PairingLink.parse(text)
 		if (p == null) {
 			pairError = "That isn't a Commander pairing link."
 			return
 		}
+		pair(p)
+	}
+
+	/** Validates by pinging, then saves. */
+	private fun pair(p: Pairing) {
 		pairBusy = true
 		pairError = null
 		scope.launch {
 			try {
 				var worked = ""
-				val ping = withContext(Dispatchers.IO) { ApiClient(p) { worked = it }.ping() }
+				val ping = withContext(Dispatchers.IO) { ApiClient(p, onHostWorked = { worked = it }).ping() }
 				store.save(p.copy(name = ping.name.ifBlank { p.name }, lastHost = worked))
 				pairing = store.pairing()
 				client = null
@@ -159,7 +197,7 @@ class AppModel(private val context: Context) {
 	}
 
 	fun unpair() {
-		stopWatching()
+		stopWatching() // also removes any approval notifications
 		store.clear()
 		pairing = null
 		client = null
@@ -173,7 +211,12 @@ class AppModel(private val context: Context) {
 	fun setNotify(on: Boolean) {
 		store.notify = on
 		notifyEnabled = on
-		if (on) startWatching() else stopWatching()
+		if (on) {
+			store.notifDeniedFor = ""
+			startWatching()
+		} else {
+			stopWatching()
+		}
 	}
 
 	fun startWatching() {
@@ -186,7 +229,12 @@ class AppModel(private val context: Context) {
 		}
 	}
 
+	/** Stops the service and removes approval notifications, whose buttons would no longer work. */
 	fun stopWatching() {
 		context.stopService(Intent(context, WatchService::class.java))
+		val nm = context.getSystemService(NotificationManager::class.java)
+		for (n in nm.activeNotifications) {
+			if (n.notification.channelId == CHANNEL_APPROVALS) nm.cancel(n.tag, n.id)
+		}
 	}
 }
