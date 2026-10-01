@@ -94,7 +94,22 @@ func (l *limiter) fail(ip string) {
 	now := l.now()
 	a := l.by[ip]
 	if a == nil && len(l.by) >= maxTracked {
-		return
+		// Full: make room by dropping the oldest address that is not blocked,
+		// so filling the table from many addresses cannot switch the limit off.
+		// Blocked ones stay; if every entry is blocked, the new one waits.
+		var oldest string
+		for k, v := range l.by {
+			if now.Before(v.blocked) {
+				continue
+			}
+			if oldest == "" || v.first.Before(l.by[oldest].first) {
+				oldest = k
+			}
+		}
+		if oldest == "" {
+			return
+		}
+		delete(l.by, oldest)
 	}
 	if a == nil || now.Sub(a.first) > failureWindow {
 		a = &attempts{first: now}

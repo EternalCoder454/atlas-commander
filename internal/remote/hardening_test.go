@@ -2,6 +2,7 @@ package remote
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -118,8 +119,9 @@ func TestLimiterKeysIPv6ByPrefix(t *testing.T) {
 	}
 }
 
-// The table must not grow without bound, and a full table must never lock out
-// a phone that has the right token.
+// The table must not grow without bound, yet filling it from many addresses
+// must not switch the limit off for the next one, and a phone with the right
+// token must still get in.
 func TestLimiterTableIsCappedAndTokenStillWorks(t *testing.T) {
 	s, _ := newServer(t)
 	for i := range maxTracked + 50 {
@@ -128,13 +130,16 @@ func TestLimiterTableIsCappedAndTokenStillWorks(t *testing.T) {
 	if n := len(s.limit.by); n != maxTracked {
 		t.Errorf("got %d tracked addresses, want %d", n, maxTracked)
 	}
-	for range maxFailures + 1 {
+	for range maxFailures {
 		do(t, s, "GET", "/api/v1/ping", "bad", "", "192.168.9.9:1")
 	}
-	if w := do(t, s, "GET", "/api/v1/ping", "bad", "", "192.168.9.9:1"); w.Code != 401 {
-		t.Errorf("untracked address: got status %d, want 401", w.Code)
+	if w := do(t, s, "GET", "/api/v1/ping", "bad", "", "192.168.9.9:1"); w.Code != 429 {
+		t.Errorf("new address with a full table: got status %d, want 429", w.Code)
 	}
-	if w := do(t, s, "GET", "/api/v1/ping", s.Token(), "", "192.168.9.9:1"); w.Code != 200 {
+	if n := len(s.limit.by); n > maxTracked {
+		t.Errorf("got %d tracked addresses, want at most %d", n, maxTracked)
+	}
+	if w := do(t, s, "GET", "/api/v1/ping", s.Token(), "", "192.168.9.10:1"); w.Code != 200 {
 		t.Errorf("right token with a full table: got status %d, want 200", w.Code)
 	}
 }
@@ -365,5 +370,39 @@ func TestBodyLimitAndUnknownFields(t *testing.T) {
 	}
 	if w := do(t, s, "POST", "/api/v1/agents/a1/start", s.Token(), `not json`, ""); w.Code != 400 {
 		t.Errorf("bad JSON: got status %d, want 400", w.Code)
+	}
+}
+
+// With every slot taken, Accept waits; Close must still wake it, or Shutdown
+// (which waits for Serve, which waits for Accept) hangs until a phone hangs up.
+func TestLimitListenerCloseWakesAFullAccept(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := newLimitListener(ln, 1)
+	go func() {
+		c, err := net.Dial("tcp", ln.Addr().String())
+		if err == nil {
+			defer c.Close()
+			time.Sleep(time.Second)
+		}
+	}()
+	first, err := l.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	got := make(chan error, 1)
+	go func() { _, err := l.Accept(); got <- err }()
+	time.Sleep(50 * time.Millisecond)
+	l.Close()
+	select {
+	case err := <-got:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Errorf("got %v, want net.ErrClosed", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("got Accept still waiting after Close, want it to return")
 	}
 }

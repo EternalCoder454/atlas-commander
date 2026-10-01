@@ -187,21 +187,34 @@ func (s *Server) Stop() {
 // rather than costing a goroutine and a TLS handshake each.
 type limitListener struct {
 	net.Listener
-	sem chan struct{}
+	sem  chan struct{}
+	done chan struct{} // closed by Close, so a full Accept wakes up and returns
+	once sync.Once
 }
 
 func newLimitListener(ln net.Listener, n int) net.Listener {
-	return &limitListener{Listener: ln, sem: make(chan struct{}, n)}
+	return &limitListener{Listener: ln, sem: make(chan struct{}, n), done: make(chan struct{})}
 }
 
 func (l *limitListener) Accept() (net.Conn, error) {
-	l.sem <- struct{}{}
+	// Waiting for a free slot must end when the listener closes: Shutdown
+	// waits for Serve to return, and Serve only returns once Accept does.
+	select {
+	case l.sem <- struct{}{}:
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
 	c, err := l.Listener.Accept()
 	if err != nil {
 		<-l.sem
 		return nil, err
 	}
 	return &limitConn{Conn: c, release: func() { <-l.sem }}, nil
+}
+
+func (l *limitListener) Close() error {
+	l.once.Do(func() { close(l.done) })
+	return l.Listener.Close()
 }
 
 type limitConn struct {
