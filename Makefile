@@ -7,6 +7,9 @@ APPDIR  := $(PREFIX)/share/applications
 ICONDIR := $(PREFIX)/share/icons/hicolor/scalable/apps
 SMALLICONDIR := $(PREFIX)/share/icons/hicolor/16x16/apps
 SYMBOLICDIR := $(PREFIX)/share/icons/hicolor/symbolic/apps
+# Where the app finds the checkout it was built from (internal/update reads it
+# through paths.Data), so the in-app updater knows what to pull and rebuild.
+DATADIR := $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/atlas-commander
 
 .PHONY: build run install uninstall clean vet test test-race
 
@@ -43,6 +46,8 @@ test-race:
 install: build
 	install -Dm755 $(BINDIR)/$(BINARY) $(PREFIX)/bin/$(BINARY)
 	install -Dm755 $(BINDIR)/$(HOOK) $(PREFIX)/bin/$(HOOK)
+	install -d "$(DATADIR)"
+	printf '%s\n' "$(CURDIR)" > "$(DATADIR)/source"
 	install -Dm644 assets/icon.svg $(ICONDIR)/$(APPID).svg
 	install -Dm644 assets/icon-16.svg $(SMALLICONDIR)/$(APPID).svg
 	install -Dm644 assets/icon-symbolic.svg $(SYMBOLICDIR)/$(APPID)-symbolic.svg

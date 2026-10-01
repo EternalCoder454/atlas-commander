@@ -93,6 +93,21 @@ ships no prices for OpenAI or Gemini models, so their cost shows as $0 and a cos
 cap can't be enforced on them until you add the model to `prices.json` (see
 [Where your data lives](#where-your-data-lives)).
 
+## Updating
+
+Settings has an Updates section: it shows whether your channel (Release or Beta)
+has something newer, and Commander checks once when it opens unless you turn
+that off. A small "Update available" button appears in the header when there is
+an update. What it does next depends on how you installed:
+
+- **Built from source** (`setup.sh`, `make install` or `just install`): it pulls
+  the channel, rebuilds, reinstalls and restarts. `scripts/update.sh` does the
+  work and never touches a checkout with uncommitted changes. Its log is in
+  `~/.local/state/atlas-commander/update.log`.
+- **Installed by a package manager**: it shows the command to run.
+- **Release tarball or Windows zip**: it opens the releases page. Windows can't
+  replace a program that is running.
+
 ## How approvals work
 
 Commander starts Claude Code headless and registers `atlas-hook` as its

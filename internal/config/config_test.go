@@ -78,6 +78,22 @@ func TestLoadMissingFileAndPartialFile(t *testing.T) {
 	}
 }
 
+// Checking for updates at launch is on by default and stays off once the user
+// turns it off: a bool that defaults to true is lost if loading overwrote it.
+func TestUpdateCheckDefaultsOnAndRemembersOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	os.WriteFile(path, []byte(`{"density":"compact"}`), 0o600)
+	s, _ := Load(path)
+	if !s.UpdateCheck {
+		t.Error("got off, want on when the file does not say")
+	}
+	os.WriteFile(path, []byte(`{"update_check":false}`), 0o600)
+	s, _ = Load(path)
+	if s.UpdateCheck {
+		t.Error("got on, want off as saved")
+	}
+}
+
 // A corrupt file must not stop the app starting.
 func TestLoadCorruptGivesDefaultsAndError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")

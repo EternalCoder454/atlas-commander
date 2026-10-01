@@ -55,7 +55,7 @@ func main() {
 	}
 	if *demoMode {
 		d := demo.New()
-		app := ui.New(ui.Options{Controller: d, Version: atlascommander.Version(), Settings: settings})
+		app := ui.New(ui.Options{Controller: d, Version: atlascommander.Version(), Settings: settings, Demo: true})
 		stop := quitOnSignal(app)
 		code := app.Run()
 		stop()

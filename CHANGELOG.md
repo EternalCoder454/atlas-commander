@@ -15,3 +15,5 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Agents can now use OpenAI, Gemini or a local model through Ollama, as well as Claude Code
 - The agent editor lists the models each provider offers
 - The Claude API provider is gone; agents that used it need another provider chosen
+- Updates: Commander checks for a newer version when it opens and can update itself when built from source
+- Settings has an Updates section to check now, pick the Release or Beta channel, or turn the check off

@@ -118,6 +118,9 @@ func newSettingsPage(a *App) *settingsPage {
 	p.section("Providers")
 	p.claudeCards()
 
+	p.section("Updates")
+	p.updateCards()
+
 	p.section("About")
 	p.aboutCards()
 	p.col.AddStretch()

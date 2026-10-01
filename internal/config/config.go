@@ -75,6 +75,7 @@ type Settings struct {
 	// opens. It is skipped anyway when the desktop has animations turned off.
 	ShowIntro     bool   `json:"show_intro"`
 	UpdateChannel string `json:"update_channel"`
+	UpdateCheck   bool   `json:"update_check"`
 	ClaudePath    string `json:"claude_path"` // "" = look on PATH
 	// OpenAIKeyEnv and GeminiKeyEnv name the environment variables that hold
 	// the keys; the keys themselves are never stored. OllamaURL is where the
@@ -101,6 +102,7 @@ func Defaults() Settings {
 		OpenAIKeyEnv:  "OPENAI_API_KEY",
 		GeminiKeyEnv:  "GEMINI_API_KEY",
 		OllamaURL:     "http://127.0.0.1:11434",
+		UpdateCheck:   true,
 	}
 }
 

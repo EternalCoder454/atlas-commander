@@ -42,6 +42,8 @@ type App struct {
 
 	settings     config.Settings
 	settingsPath string
+	demo         bool // a simulated fleet: nothing may go to the network
+	updates      *updateUI
 
 	themes  []theme.Theme
 	theme   theme.Theme
@@ -87,6 +89,8 @@ type Options struct {
 	Settings   config.Settings
 	// SettingsPath is where changes are saved; "" uses paths.Settings().
 	SettingsPath string
+	// Demo is a simulated fleet; the update check stays off the network.
+	Demo bool
 }
 
 // New creates the QApplication and the window but does not show it. It must
@@ -97,8 +101,10 @@ func New(o Options) *App {
 		version:      o.Version,
 		settings:     o.Settings,
 		settingsPath: o.SettingsPath,
+		demo:         o.Demo,
 		pages:        map[string]page{},
 	}
+	a.updates = newUpdateUI(a)
 	if a.settingsPath == "" {
 		a.settingsPath = paths.Settings()
 	}
@@ -133,6 +139,9 @@ func (a *App) Run() int {
 		in = newIntro(a, "Commander", nil)
 	}
 	a.win.Show()
+	if a.settings.UpdateCheck {
+		a.updates.startCheck()
+	}
 	if in != nil {
 		in.begin()
 	}
@@ -368,6 +377,7 @@ func (a *App) buildHeader() *qt.QWidget {
 	ver := qt.NewQLabel3("v" + strings.TrimSuffix(a.version, "\n"))
 	ver.SetProperty("caption", qt.NewQVariant8(true))
 	l.AddWidget(ver.QWidget)
+	a.updates.addPill(l)
 	l.AddStretch()
 
 	a.header.spend = newLiveLabel("")
@@ -473,6 +483,7 @@ func (a *App) tick() {
 			a.applyTheme()
 		}
 	}
+	a.updates.poll()
 	snap := a.ctl.Snapshot()
 	if snap == nil {
 		return
