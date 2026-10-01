@@ -1,0 +1,212 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (made on the release branch) builds both distributions
+# and attaches them to the GitHub Release of that tag, if one exists:
+#
+#   atlas-commander-X.Y.Z-linux-x86_64.tar.gz     + .sha256
+#   atlas-commander-X.Y.Z-windows-x86_64.zip      + .sha256
+#
+# Each holds atlas-commander and atlas-hook side by side. Re-running with the
+# workflow_dispatch input rebuilds an existing tag and replaces the assets.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    name: linux tarball
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            golang qt6-qtbase-devel gcc-c++ pkgconf-pkg-config git make tar gzip zstd \
+            gh # the runner host has it, the container does not
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # Reuses the build cache CI saved, which is why the tag is pushed after
+      # the release branch's CI run has finished: compiling MIQT cold is slow.
+      - name: Restore the Go build cache from CI
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: fedora-go-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-go-
+
+      - name: Hold Go's cache trim
+        run: bash .github/go-cache.sh hold
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Resolve the tag
+        id: tag
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        id: build
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          GOFLAGS: -trimpath
+        run: |
+          version="${TAG#v}"
+          [ -n "$version" ] || version="$(cat VERSION)"
+          name="atlas-commander-${version}-linux-x86_64"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name"       >> "$GITHUB_OUTPUT"
+
+          make build
+          mkdir -p "dist/$name/assets"
+          cp bin/atlas-commander bin/atlas-hook "dist/$name/"
+          cp assets/icon.svg assets/icon-16.svg assets/icon-symbolic.svg assets/com.atlas.Commander.desktop "dist/$name/assets/"
+          cp packaging/install.sh README.md CHANGELOG.md LICENSE NOTICE "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )
+
+      - name: Record what it links against
+        run: |
+          echo "Built on Fedora $(rpm -E %fedora)"
+          echo "Qt $(pkg-config --modversion Qt6Widgets)"
+          ldd bin/atlas-commander | grep -i qt || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: dist/*.tar.gz*
+
+      - name: Attach to the release, if there is one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          tag="$TAG"
+          case "$tag" in
+            v*) ;;
+            *) echo "Not a version tag ($tag); nothing to attach to."; exit 0 ;;
+          esac
+          command -v gh >/dev/null || { echo "gh is not installed in this image"; exit 1; }
+          if gh release view "$tag" >/dev/null; then
+            gh release upload "$tag" dist/*.tar.gz dist/*.tar.gz.sha256 --clobber
+            echo "Attached the tarball to release $tag."
+          else
+            echo "No GitHub Release exists for $tag, so nothing was attached."
+            echo "The tarball is available as this run's artifact; publish a"
+            echo "release for the tag and re-run to attach it."
+          fi
+
+  windows:
+    name: windows zip
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      GOFLAGS: -trimpath
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-go
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            git
+            zip
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$(pwd)"
+
+      - name: Put Go's caches where the cache step keeps them
+        run: |
+          temp="$(cygpath -w "$RUNNER_TEMP")"
+          echo "GOCACHE=$temp\\go-build" >> "$GITHUB_ENV"
+          echo "GOMODCACHE=$temp\\go-mod" >> "$GITHUB_ENV"
+
+      - name: Toolchain
+        id: toolchain
+        run: echo "key=$(go env GOVERSION)-gcc$(gcc -dumpversion)-qt$(pkg-config --modversion Qt6Widgets)" >> "$GITHUB_OUTPUT"
+
+      # Restore only: windows.yml, which runs on every push to the branches,
+      # is what saves it. The key must match that one.
+      - name: Restore the Go build cache from the Windows workflow
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/go-build
+            ${{ runner.temp }}/go-mod
+          key: windows-go-${{ steps.toolchain.outputs.key }}-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: windows-go-${{ steps.toolchain.outputs.key }}-
+
+      - name: Hold Go's cache trim
+        run: bash .github/go-cache.sh hold
+
+      - name: Resolve the tag
+        id: tag
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and stage
+        id: build
+        env:
+          CGO_ENABLED: 1
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          version="${TAG#v}"
+          [ -n "$version" ] || version="$(cat VERSION)"
+          bash packaging/stage-windows.sh "$version"
+          echo "name=atlas-commander-${version}-windows-x86_64" >> "$GITHUB_OUTPUT"
+
+      - name: What it links against
+        run: |
+          ldd dist/atlas-commander-*/atlas-commander.exe 2>/dev/null | grep -c ucrt64 | xargs echo "ucrt64 DLLs linked:" || true
+          pkg-config --modversion Qt6Widgets
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: dist/*.zip*
+          if-no-files-found: error
+
+      - name: Attach to the release, if there is one
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if (-not $env:TAG.StartsWith("v")) {
+            Write-Host "Not a version tag ($env:TAG); nothing to attach to."
+            exit 0
+          }
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "No GitHub Release exists for $env:TAG, so nothing was attached."
+            Write-Host "The zip is available as this run's artifact."
+            exit 0
+          }
+          $files = Get-ChildItem dist -Filter *.zip*
+          if (-not $files) { throw "nothing in dist to attach" }
+          gh release upload $env:TAG $files.FullName --clobber
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
+          Write-Host "Attached the Windows zip to release $env:TAG."

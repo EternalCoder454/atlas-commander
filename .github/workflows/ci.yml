@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [release, beta]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: build · vet · test
+    runs-on: ubuntu-latest
+    # Fedora rather than the bare Ubuntu runner: it is what the project targets,
+    # and it ships a current Qt 6 and Go.
+    container: fedora:latest
+    # One set of build flags for vet, build and test, so they share one compile
+    # of the MIQT bindings. `make build` uses -trimpath and Go keys its cache on
+    # the flags, so without this a cold run compiled several thousand lines of
+    # generated C++ more than once. That compile is the slow part of this job,
+    # which is why the Go build cache is saved below.
+    env:
+      GOFLAGS: -trimpath
+      ATLAS_CONFIG_HOME: /tmp/atlas-test/config
+      ATLAS_DATA_HOME: /tmp/atlas-test/data
+      ATLAS_RUNTIME_DIR: /tmp/atlas-test/run
+    steps:
+      # Split in two so the package cache can be restored between them: the
+      # cache action needs tar and zstd, which is why those come first.
+      - name: Install the cache tools
+        id: cachetools
+        run: |
+          echo "keepcache=1" >> /etc/dnf/dnf.conf
+          dnf install -y --setopt=install_weak_deps=False --nodocs tar zstd
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache dnf packages
+        uses: actions/cache@v4
+        with:
+          # Fedora is on dnf5, which keeps its packages under libdnf5; the old
+          # path is listed too so this keeps working either way.
+          path: |
+            /var/cache/libdnf5
+            /var/cache/dnf
+          # Keyed by the week, so the cache follows Fedora's updates.
+          key: dnf-fedora-${{ steps.cachetools.outputs.week }}
+          restore-keys: dnf-fedora-
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False --nodocs \
+            golang qt6-qtbase-devel gcc-c++ pkgconf-pkg-config git make
+
+      - uses: actions/checkout@v5
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Record toolchain versions
+        run: |
+          go version
+          echo "qt6  $(pkg-config --modversion Qt6Widgets)"
+
+      - name: Cache Go modules and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: fedora-go-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-go-
+
+      - name: Hold Go's cache trim
+        run: bash .github/go-cache.sh hold
+
+      - name: gofmt
+        run: |
+          unformatted="$(git ls-files -z '*.go' | xargs -0r gofmt -l)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            echo "$unformatted" | xargs gofmt -d
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: make build
+
+      - name: Both binaries are there
+        run: test -x bin/atlas-commander && test -x bin/atlas-hook
+
+      # The display is unset so GUI tests skip instead of failing for want of one.
+      - name: Test
+        run: |
+          mkdir -p "$ATLAS_CONFIG_HOME" "$ATLAS_DATA_HOME" "$ATLAS_RUNTIME_DIR"
+          env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./...
+
+      - name: Prune the Go build cache
+        run: bash .github/go-cache.sh prune
+
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    env:
+      ATLAS_CONFIG_HOME: /tmp/atlas-test/config
+      ATLAS_DATA_HOME: /tmp/atlas-test/data
+      ATLAS_RUNTIME_DIR: /tmp/atlas-test/run
+    steps:
+      - name: Install the cache tools
+        id: cachetools
+        run: |
+          echo "keepcache=1" >> /etc/dnf/dnf.conf
+          dnf install -y --setopt=install_weak_deps=False --nodocs tar zstd
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache dnf packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/libdnf5
+            /var/cache/dnf
+          key: dnf-fedora-${{ steps.cachetools.outputs.week }}
+          restore-keys: dnf-fedora-
+
+      # The packages under test are pure Go, but the module builds with cgo and
+      # the race detector needs a C compiler. No Qt is needed.
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False --nodocs \
+            golang gcc gcc-c++ git make
+
+      - uses: actions/checkout@v5
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Go modules and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: fedora-race-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-race-
+
+      - name: Hold Go's cache trim
+        run: bash .github/go-cache.sh hold
+
+      - name: Test with -race
+        run: make test-race
+
+      - name: Prune the Go build cache
+        run: bash .github/go-cache.sh prune
