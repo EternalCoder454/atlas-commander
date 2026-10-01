@@ -513,8 +513,7 @@ func (a *App) show(id string) {
 		}
 		a.addPage(id, p)
 	}
-	a.current = id
-	a.stack.SetCurrentWidget(p.widget())
+	a.switchTo(id, p.widget())
 	if a.snap != nil {
 		p.refresh(a.snap)
 	}
@@ -654,8 +653,7 @@ func (a *App) openAgent(id string) {
 	d.setAgent(id)
 	a.side.active = ""
 	a.side.W.Update()
-	a.current = "agent"
-	a.stack.SetCurrentWidget(d.widget())
+	a.switchTo("agent", d.widget())
 	if a.snap != nil {
 		d.refresh(a.snap)
 	}
