@@ -16,7 +16,8 @@ type navItem struct {
 // sidebar is painted by hand rather than built from a QListView so it can
 // match Atlas Monitor exactly: 38px rows in a 6px gutter, 5px radius, an 8%
 // fill on the active row and a 3x16px accent pill at its left edge, 5% on
-// hover. Settings is pinned to the bottom.
+// hover. Each row has a 20px icon before its label. The sidebar is always
+// shown; there is no collapsed state. Settings is pinned to the bottom.
 type sidebar struct {
 	W *qt.QWidget
 
@@ -38,6 +39,9 @@ const (
 	navGutter     = 6
 	navGroupTop   = 14
 	navGroupBelow = 4
+	navIconPx     = 20 // Monitor's icon size
+	navIconX      = 14 // icon's left edge inside the row
+	navLabelX     = 44 // label's left edge inside the row
 )
 
 func newSidebar(app *App, items, footer []navItem) *sidebar {
@@ -153,7 +157,10 @@ func (s *sidebar) paint() {
 		}
 		painter.SetFont(font)
 		painter.SetPen(text)
-		painter.DrawText7(x+12, y, rw-24, navRowH, int(qt.AlignLeft|qt.AlignVCenter), it.title)
+		// The icon is named for the row's id, so the two cannot drift apart.
+		dpr := s.W.DevicePixelRatioF()
+		painter.DrawPixmap9(x+navIconX, y+(navRowH-navIconPx)/2, iconPixmap(it.id, p.fg, 0.9, navIconPx, dpr))
+		painter.DrawText7(x+navLabelX, y, rw-navLabelX-12, navRowH, int(qt.AlignLeft|qt.AlignVCenter), it.title)
 		if it.badge != nil {
 			if v := it.badge(); v != "" {
 				painter.SetFont(mono)
@@ -208,7 +215,7 @@ func (a *App) paintPage(w *qt.QWidget) {
 	path.LineTo(ptf(fw, 0))
 	path.LineTo(ptf(fw, fh))
 	path.CloseSubpath()
-	pc := p.page.q(1)
+	pc := p.page.q(a.glass.Page)
 	defer pc.Delete()
 	pb := qt.NewQBrush3(pc)
 	defer pb.Delete()

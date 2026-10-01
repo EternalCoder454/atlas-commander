@@ -172,6 +172,25 @@ func TestSaveLeavesNoTempFile(t *testing.T) {
 	}
 }
 
+// A hand-edited or future value must never leave the window half see-through:
+// every known level survives and everything else is off. Old files with no
+// field (and the retired sidebar_collapsed key) load as off.
+func TestNormalizeTransparency(t *testing.T) {
+	for _, c := range TransparencyChoices {
+		if got := NormalizeTransparency(c); got != c {
+			t.Errorf("NormalizeTransparency(%q) = %q, want it kept", c, got)
+		}
+	}
+	for in, want := range map[string]string{"": "off", "Strong": "strong", " medium ": "medium", "glass": "off"} {
+		if got := NormalizeTransparency(in); got != want {
+			t.Errorf("NormalizeTransparency(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if d := Defaults(); d.Transparency != TransparencyOff {
+		t.Errorf("default transparency = %q, want off", d.Transparency)
+	}
+}
+
 // Empty path means the real location, which tests must redirect.
 func TestEmptyPathUsesPathsPackage(t *testing.T) {
 	t.Setenv("ATLAS_CONFIG_HOME", t.TempDir())

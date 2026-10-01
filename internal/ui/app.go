@@ -58,10 +58,12 @@ type App struct {
 	current string
 
 	header struct {
-		toggle  *qt.QToolButton
 		spend   *liveLabel
 		killAll *qt.QPushButton
 	}
+
+	glass theme.Glass // opacities in force; solid unless transparency is on and available
+	frame *qt.QWidget // the window's surface under the header, sidebar and sheet
 
 	snap  *fleet.Snapshot
 	timer *qt.QTimer
@@ -208,7 +210,8 @@ func (a *App) applyTheme() {
 	if err := theme.WriteIndicators(a.theme.Colors["accent_fg_color"]); err != nil {
 		fmt.Fprintln(os.Stderr, "atlas-commander: style:", err)
 	}
-	qss := theme.QSS(a.theme, a.metrics, a.settings.UIFont, a.mono, a.settings.FontSize)
+	a.glass = a.effectiveGlass()
+	qss := theme.QSS(a.theme, a.metrics, a.settings.UIFont, a.mono, a.settings.FontSize, a.glass)
 	if qss != a.qss {
 		a.qss = qss
 		a.qapp.SetStyleSheet(qss)
@@ -219,6 +222,9 @@ func (a *App) applyTheme() {
 	}
 	if a.win != nil {
 		a.win.Update()
+		if a.frame != nil {
+			a.frame.Update() // the frame and sheet paint their own alpha
+		}
 	}
 }
 
@@ -284,11 +290,20 @@ func (a *App) build() {
 	winIcon.Delete()
 	a.win.Resize(a.settings.WindowWidth, a.settings.WindowHeight)
 
+	// The window is always made translucent-capable on Linux, so changing the
+	// level later needs no re-creation; with transparency off the frame paints
+	// itself opaque and the window looks as it always did. The attribute must
+	// be set before the window is first shown.
+	if transparencyPlatform() {
+		a.win.SetAttribute2(qt.WA_TranslucentBackground, true)
+	}
+
 	frame := qt.NewQWidget2()
+	a.frame = frame
 	setName(frame, "frame")
 	frame.OnPaintEvent(func(super func(*qt.QPaintEvent), ev *qt.QPaintEvent) {
 		painter := qt.NewQPainter2(frame.QPaintDevice)
-		c := a.pal.frame.q(1)
+		c := a.pal.frame.q(a.glass.Frame)
 		painter.FillRect6(frame.Rect(), c)
 		c.Delete()
 		painter.End()
@@ -320,7 +335,6 @@ func (a *App) build() {
 	a.win.SetCentralWidget(frame)
 
 	a.addPage("board", newBoardPage(a))
-	a.side.W.SetVisible(!a.settings.SidebarCollapsed)
 
 	start := a.settings.ActiveView
 	if v := os.Getenv("ATLAS_VIEW"); v != "" {
@@ -343,22 +357,10 @@ func (a *App) buildHeader() *qt.QWidget {
 	setName(h, "header")
 	h.SetFixedHeight(47)
 	l := qt.NewQHBoxLayout(h)
-	l.SetContentsMargins(6, 0, 10, 0)
+	l.SetContentsMargins(10, 0, 10, 0)
 	l.SetSpacing(8)
 
-	a.header.toggle = qt.NewQToolButton2()
-	a.header.toggle.SetText("☰")
-	a.header.toggle.SetToolTip("Show or hide the sidebar")
-	a.header.toggle.SetAutoRaise(true)
-	a.header.toggle.OnClicked(func() {
-		vis := !a.side.W.IsVisible()
-		a.side.W.SetVisible(vis)
-		a.settings.SidebarCollapsed = !vis
-		a.saveSettings()
-	})
-	l.AddWidget(a.header.toggle.QWidget)
-
-	l.AddSpacing(2)
+	l.AddSpacing(12)
 	l.AddWidget(newMarkWidget(20))
 	brand := qt.NewQLabel3("Atlas Commander")
 	setProp(brand.QWidget, "brand", true)
