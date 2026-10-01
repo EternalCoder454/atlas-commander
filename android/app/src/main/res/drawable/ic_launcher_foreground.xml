@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Atlas folded-ribbon mark from assets/icon.svg, flat-coloured, scaled to
+     sit inside the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <group android:pivotX="512" android:pivotY="520" android:scaleX="0.8" android:scaleY="0.8" android:translateY="-8">
+        <path android:fillColor="#7F6FF1" android:pathData="M346.7,572L677.3,572L732.5,707L291.5,707Z"/>
+        <path android:fillColor="#5A4AD8" android:pathData="M445.3,191.9Q424,168 456,168L590,168Q600,168 603.8,177.3L875.9,842.4Q888,872 856,872L744,872Q712,872 699.9,842.4L527.1,420.1Q512,383.1 527.1,346.1L544.7,303.1Z"/>
+        <path android:fillColor="#B0A4FB" android:pathData="M411.9,197.6Q424,168 456,168L590,168Q600,168 596.2,177.3L324.1,842.4Q312,872 280,872L168,872Q136,872 148.1,842.4Z"/>
+    </group>
+</vector>
