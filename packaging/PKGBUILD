@@ -14,7 +14,7 @@ pkgdesc="Run, watch and govern a fleet of Claude agents"
 arch=('x86_64')
 url="https://github.com/EternalCoder454/atlas-commander"
 license=('MIT')
-depends=('qt6-base')
+depends=('qt6-base' 'qt6-svg')
 makedepends=('go>=1.24' 'gcc' 'pkgconf')
 checkdepends=('desktop-file-utils')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")

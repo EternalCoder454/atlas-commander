@@ -105,13 +105,13 @@ distro_name() {
 pm="" packages="" install_cmd=()
 detect_pm() {
 	if have pacman; then
-		pm="pacman"; packages="go qt6-base base-devel git pkgconf"
+		pm="pacman"; packages="go qt6-base qt6-svg base-devel git pkgconf"
 		install_cmd=(pacman -S --needed --noconfirm)
 	elif have apt-get; then
 		pm="apt"; packages="golang-go qt6-base-dev build-essential pkg-config git"
 		install_cmd=(apt-get install -y)
 	elif have dnf; then
-		pm="dnf"; packages="golang qt6-qtbase-devel gcc-c++ pkgconf-pkg-config git make"
+		pm="dnf"; packages="golang qt6-qtbase-devel qt6-qtsvg gcc-c++ pkgconf-pkg-config git make"
 		install_cmd=(dnf install -y)
 	elif have zypper; then
 		pm="zypper"; packages="go qt6-base-devel gcc-c++ pkg-config git make"

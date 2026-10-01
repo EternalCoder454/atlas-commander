@@ -21,6 +21,7 @@ BuildRequires:  pkgconfig(Qt6Widgets) >= 6.5
 BuildRequires:  desktop-file-utils
 Requires:       qt6-qtbase >= 6.5
 Requires:       qt6-qtbase-gui >= 6.5
+Requires:       qt6-qtsvg >= 6.5
 # Commander drives the Claude Code CLI; it is not packaged here.
 Suggests:       git
 

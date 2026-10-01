@@ -52,7 +52,7 @@ question.
 (6.5 or newer), not the `-devel` packages and no Go:
 
 ```sh
-sudo dnf install qt6-qtbase qt6-qtbase-gui
+sudo dnf install qt6-qtbase qt6-qtbase-gui qt6-qtsvg
 tar xf atlas-commander-*-linux-x86_64.tar.gz
 cd atlas-commander-* && ./install.sh      # --system for /usr/local, --uninstall to remove
 ```
@@ -106,9 +106,9 @@ You need Go 1.26 or newer, a C++ compiler, `pkg-config`, `git`, `make` and the
 Qt 6.5+ development files (`setup.sh` installs these for you):
 
 ```sh
-sudo dnf install golang qt6-qtbase-devel gcc-c++ pkgconf-pkg-config git make   # Fedora
+sudo dnf install golang qt6-qtbase-devel qt6-qtsvg gcc-c++ pkgconf-pkg-config git make   # Fedora
 sudo apt install golang-go qt6-base-dev build-essential pkg-config git make    # Debian, Ubuntu, Mint
-sudo pacman -S --needed go qt6-base base-devel git pkgconf                     # Arch and family
+sudo pacman -S --needed go qt6-base qt6-svg base-devel git pkgconf                     # Arch and family
 ```
 
 ```sh
@@ -120,7 +120,7 @@ The first build compiles the MIQT bindings and takes several minutes; later
 builds are cached. On Windows, in an [MSYS2](https://www.msys2.org/) UCRT64 shell:
 
 ```sh
-pacman -S --needed mingw-w64-ucrt-x86_64-{go,gcc,pkgconf,qt6-base} git zip
+pacman -S --needed mingw-w64-ucrt-x86_64-{go,gcc,pkgconf,qt6-base,qt6-svg} git zip
 bash packaging/stage-windows.sh
 ```
 
