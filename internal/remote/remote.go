@@ -13,6 +13,7 @@
 package remote
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -41,6 +42,12 @@ type Controller interface {
 	Decide(approvalID string, allow bool, reason string) error
 }
 
+const (
+	maxConns       = 32
+	maxHeaderBytes = 16 << 10
+	stopGrace      = 2 * time.Second
+)
+
 // DefaultPort is where the server listens unless the user picks another.
 const DefaultPort = 47821
 
@@ -60,6 +67,8 @@ type Server struct {
 	opt  Options
 	cert tls.Certificate
 	fp   string
+	// notice is set once in New and never changes, so it needs no lock.
+	notice string
 
 	mu    sync.Mutex
 	token string
@@ -74,7 +83,7 @@ func New(o Options) (*Server, error) {
 	if o.Controller == nil || o.Dir == "" {
 		return nil, errors.New("the phone server needs a controller and a folder")
 	}
-	cert, fp, err := loadOrCreateCert(o.Dir)
+	cert, fp, renewed, err := loadOrCreateCert(o.Dir)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't prepare the phone certificate: %w", err)
 	}
@@ -82,8 +91,17 @@ func New(o Options) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't prepare the phone token: %w", err)
 	}
-	return &Server{opt: o, cert: cert, fp: fp, token: tok, limit: limiter{now: time.Now}}, nil
+	tightenPerms(o.Dir)
+	s := &Server{opt: o, cert: cert, fp: fp, token: tok, limit: limiter{now: time.Now}}
+	if renewed {
+		s.notice = certRenewedNotice
+	}
+	return s, nil
 }
+
+// Notice is a sentence for the settings page about something the user should
+// know, such as a renewed certificate, or "" when there is nothing.
+func (s *Server) Notice() string { return s.notice }
 
 // Fingerprint is the lowercase hex SHA-256 of the certificate's DER bytes.
 func (s *Server) Fingerprint() string { return s.fp }
@@ -123,11 +141,16 @@ func (s *Server) Start(addr string) error {
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		IdleTimeout:       2 * time.Minute,
-		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{s.cert}, MinVersion: tls.VersionTLS12},
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       time.Minute,
+		MaxHeaderBytes:    maxHeaderBytes,
+		// The Android client is minSdk 29, which speaks TLS 1.3.
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{s.cert}, MinVersion: tls.VersionTLS13},
 	}
 	s.ln, s.srv = ln, srv
-	go func() { _ = srv.Serve(tls.NewListener(ln, srv.TLSConfig)) }()
+	// The cap sits under TLS so a half-finished handshake holds a slot too.
+	capped := newLimitListener(ln, maxConns)
+	go func() { _ = srv.Serve(tls.NewListener(capped, srv.TLSConfig)) }()
 	return nil
 }
 
@@ -141,16 +164,56 @@ func (s *Server) Addr() string {
 	return s.ln.Addr().String()
 }
 
-// Stop closes the listener and every open connection. It is safe to call
-// when stopped.
+// Stop closes the listener, gives requests already running up to two seconds
+// to finish, then closes every connection that is left. The wait matters
+// because the caller closes the supervisor right after: a handler still
+// inside it would touch a closed fleet. It is safe to call when stopped.
 func (s *Server) Stop() {
 	s.mu.Lock()
 	srv := s.srv
 	s.ln, s.srv = nil, nil
 	s.mu.Unlock()
-	if srv != nil {
-		_ = srv.Close()
+	if srv == nil {
+		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), stopGrace)
+	defer cancel()
+	_ = srv.Shutdown(ctx)
+	_ = srv.Close()
+}
+
+// limitListener lets at most n connections be open at once. Accept waits for
+// a free slot instead of refusing, so a flood queues in the kernel backlog
+// rather than costing a goroutine and a TLS handshake each.
+type limitListener struct {
+	net.Listener
+	sem chan struct{}
+}
+
+func newLimitListener(ln net.Listener, n int) net.Listener {
+	return &limitListener{Listener: ln, sem: make(chan struct{}, n)}
+}
+
+func (l *limitListener) Accept() (net.Conn, error) {
+	l.sem <- struct{}{}
+	c, err := l.Listener.Accept()
+	if err != nil {
+		<-l.sem
+		return nil, err
+	}
+	return &limitConn{Conn: c, release: func() { <-l.sem }}, nil
+}
+
+type limitConn struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (c *limitConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.release)
+	return err
 }
 
 // listenError turns a bind failure into a sentence for the settings page.

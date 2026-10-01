@@ -102,7 +102,8 @@ The success response for all of these is `{"ok": true}`, or for kill-all
   agent, or redirects a running one.
 - `POST /api/v1/agents/{id}/hold`, `/resume`, `/stop` and `/kill` take no body.
 - `POST /api/v1/approvals/{id}` with `{"allow": true, "reason": ""}` decides an
-  approval.
+  approval. Commander records the reason as "From phone: <reason>" (or "From
+  phone" when empty) in the audit log.
 - `POST /api/v1/kill-all` takes no body.
 
 ## Errors
@@ -112,11 +113,12 @@ statuses:
 
 | Status | Meaning |
 |---|---|
-| 400 | Bad body |
+| 400 | Bad body: not JSON, an unknown field, or a prompt, text or reason over 8 KB |
 | 401 | Bad or old token. Message: "This phone isn't paired any more. Pair it again from Commander's Settings." |
 | 404 | Unknown agent or approval |
 | 409 | Not possible in this state |
-| 429 | Too many failed tokens |
+| 413 | Body over 64 KB |
+| 429 | Too many failed tokens (IPv6 is counted per /64) |
 | 500 | Anything else |
 
 The phone shows the `error` text as it is.

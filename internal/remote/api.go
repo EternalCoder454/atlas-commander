@@ -3,9 +3,10 @@ package remote
 import (
 	"crypto/subtle"
 	"encoding/json"
-	"io"
+	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +17,10 @@ import (
 )
 
 const (
-	maxBody       = 1 << 20 // a prompt is text; a megabyte is far more than needed
+	maxBody       = 64 << 10 // a request is a few short fields; 64 KB is plenty
+	maxText       = 8 << 10  // longest prompt, message or reason, in bytes
+	maxTracked    = 1024     // addresses the limiter remembers at once
+	pruneEvery    = time.Second
 	maxFailures   = 10
 	failureWindow = time.Minute
 	blockFor      = time.Minute
@@ -26,11 +30,17 @@ const (
 
 // limiter counts failed tokens per address. After maxFailures inside
 // failureWindow the address is blocked for blockFor, even if it then sends the
-// right token: a guesser must not learn which guess was right.
+// right token: a guesser must not learn which guess was right. IPv6 addresses
+// are keyed by their /64, because one host usually owns a whole /64 and could
+// otherwise try a fresh address for every guess. The table holds at most
+// maxTracked addresses; when it is full new addresses are not tracked, which
+// only means a flood of fresh sources can't be rate-limited, never that a
+// request with the right token is refused.
 type limiter struct {
-	now func() time.Time
-	mu  sync.Mutex
-	by  map[string]*attempts
+	now       func() time.Time
+	mu        sync.Mutex
+	by        map[string]*attempts
+	lastPrune time.Time
 }
 
 type attempts struct {
@@ -39,14 +49,35 @@ type attempts struct {
 	blocked time.Time // zero, or when the block ends
 }
 
-// blockedNow reports whether ip is blocked, and prunes stale entries.
+// limitKey is the table key for an address: the address itself for IPv4, the
+// /64 prefix for IPv6.
+func limitKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is6() {
+		if p, err := addr.Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return addr.String()
+}
+
+// blockedNow reports whether ip is blocked. Stale entries are pruned at most
+// once a second, so a busy server doesn't walk the table on every request.
 func (l *limiter) blockedNow(ip string) bool {
+	ip = limitKey(ip)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
-	for k, a := range l.by {
-		if now.After(a.blocked) && now.Sub(a.first) > failureWindow {
-			delete(l.by, k)
+	if now.Sub(l.lastPrune) >= pruneEvery {
+		l.lastPrune = now
+		for k, a := range l.by {
+			if now.After(a.blocked) && now.Sub(a.first) > failureWindow {
+				delete(l.by, k)
+			}
 		}
 	}
 	a := l.by[ip]
@@ -54,6 +85,7 @@ func (l *limiter) blockedNow(ip string) bool {
 }
 
 func (l *limiter) fail(ip string) {
+	ip = limitKey(ip)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.by == nil {
@@ -61,6 +93,9 @@ func (l *limiter) fail(ip string) {
 	}
 	now := l.now()
 	a := l.by[ip]
+	if a == nil && len(l.by) >= maxTracked {
+		return
+	}
 	if a == nil || now.Sub(a.first) > failureWindow {
 		a = &attempts{first: now}
 		l.by[ip] = a
@@ -131,13 +166,30 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 func writeOK(w http.ResponseWriter) { writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) }
 
-// decodeBody reads a JSON body into v; false means it already answered 400.
+// decodeBody reads a JSON body into v; false means it already answered, 413
+// for a body over maxBody and 400 for anything else it can't use. Unknown
+// fields are refused so a typo in the app shows up instead of being ignored.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBody))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, "That request is too large.")
+			return false
+		}
 		writeError(w, http.StatusBadRequest, "Commander couldn't read that request.")
 		return false
 	}
+	return true
+}
+
+// tooLong answers 400 when text is over maxText bytes.
+func tooLong(w http.ResponseWriter, text string) bool {
+	if len(text) <= maxText {
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "That text is too long.")
 	return true
 }
 
@@ -331,6 +383,9 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &body) {
 		return
 	}
+	if tooLong(w, body.Prompt) {
+		return
+	}
 	id := r.PathValue("id")
 	if s.unknownAgent(w, id) {
 		return
@@ -347,6 +402,9 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		Text string `json:"text"`
 	}
 	if !decodeBody(w, r, &body) {
+		return
+	}
+	if tooLong(w, body.Text) {
 		return
 	}
 	if strings.TrimSpace(body.Text) == "" {
@@ -387,6 +445,9 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &body) {
 		return
 	}
+	if tooLong(w, body.Reason) {
+		return
+	}
 	id := r.PathValue("id")
 	found := false
 	if snap := s.opt.Controller.Snapshot(); snap != nil {
@@ -398,11 +459,20 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "That approval was already answered.")
 		return
 	}
-	if err := s.opt.Controller.Decide(id, body.Allow, body.Reason); err != nil {
+	if err := s.opt.Controller.Decide(id, body.Allow, phoneReason(body.Reason)); err != nil {
 		actionError(w, err)
 		return
 	}
 	writeOK(w)
+}
+
+// phoneReason marks a decision as made from the phone, so the audit log tells
+// it apart from one made at the desk.
+func phoneReason(reason string) string {
+	if reason = strings.TrimSpace(reason); reason != "" {
+		return "From phone: " + reason
+	}
+	return "From phone"
 }
 
 func (s *Server) killAll(w http.ResponseWriter, _ *http.Request) {

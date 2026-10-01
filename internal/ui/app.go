@@ -540,6 +540,9 @@ func (a *App) tick() {
 	}
 	changed := a.snap == nil || snap.Seq != a.snap.Seq
 	a.snap = snap
+	if sp, ok := a.pages["settings"].(*settingsPage); ok {
+		sp.phoneClipboardTick()
+	}
 	if p, ok := a.pages[a.current]; ok {
 		p.refresh(snap)
 	}
