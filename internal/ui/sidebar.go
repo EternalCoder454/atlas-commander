@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	qt "github.com/mappu/miqt/qt6"
 )
 
@@ -11,6 +13,7 @@ type navItem struct {
 	title string
 	group bool
 	badge func() string // live value at the right (counts, cost); may be nil
+	tip   string        // one sentence for the hover tooltip
 }
 
 // sidebar is painted by hand rather than built from a QListView so it can
@@ -55,6 +58,7 @@ func newSidebar(app *App, items, footer []navItem) *sidebar {
 		h := s.hit(int(pos.X()), int(pos.Y()))
 		if h != s.hover {
 			s.hover = h
+			s.W.SetToolTip(s.tipFor(h))
 			s.W.Update()
 		}
 	})
@@ -234,4 +238,14 @@ func (a *App) paintPage(w *qt.QWidget) {
 	pen := qt.NewQPen4(hb, 1)
 	defer pen.Delete()
 	painter.StrokePath(edge, pen)
+}
+
+// tipFor is the tooltip text of the item with this id, or "" for none.
+func (s *sidebar) tipFor(id string) string {
+	for _, it := range append(slices.Clone(s.items), s.footer...) {
+		if it.id == id {
+			return it.tip
+		}
+	}
+	return ""
 }

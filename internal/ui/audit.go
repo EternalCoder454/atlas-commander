@@ -145,7 +145,7 @@ func newAuditPage(a *App) *auditPage {
 		return ""
 	}
 	p.table.onSelect = func(string) { p.showSelected() }
-	p.list = newListView(p.table, "Nothing logged yet", "Every agent event and every action you take is recorded here, and never edited.")
+	p.list = newListView(p.table, "Nothing logged yet", "This is the permanent record of what agents did and what you decided. Entries appear as soon as an agent runs, and are never edited.")
 	l.AddWidget2(p.list.W.QWidget, 3)
 
 	p.detail = qt.NewQPlainTextEdit2()

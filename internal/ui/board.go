@@ -135,6 +135,7 @@ type boardPage struct {
 	burn, cost *Chart
 	views      *qt.QStackedWidget
 	empty      *qt.QWidget
+	guide      *startGuide
 	table      *qt.QTableView
 	model      *qt.QAbstractTableModel
 	delegate   *qt.QStyledItemDelegate
@@ -194,7 +195,8 @@ func newBoardPage(a *App) *boardPage {
 	l.AddLayout(b.buildCommands().QLayout)
 
 	b.views = qt.NewQStackedWidget2()
-	b.empty = emptyState("No agents yet", "Make a fleet on the Fleets page, register an agent with New agent, then start it with a prompt.")
+	b.guide = newStartGuide(a)
+	b.empty = b.guide.W
 	b.views.AddWidget(b.empty)
 
 	b.buildTable()
@@ -620,6 +622,7 @@ func (b *boardPage) refresh(s *fleet.Snapshot) {
 		b.restoreSelection()
 	}
 	if len(rows) == 0 {
+		b.guide.refresh(s)
 		b.views.SetCurrentWidget(b.empty)
 	} else {
 		b.views.SetCurrentWidget(b.table.QWidget)

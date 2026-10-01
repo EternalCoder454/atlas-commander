@@ -174,8 +174,8 @@ func newAnalyticsPage(a *App) *analyticsPage {
 		}
 		return ""
 	}
-	p.agentList = newListView(p.agentT, "No activity in this range", "Costs show up here once agents have finished turns.")
-	p.sessList = newListView(p.sessionT, "No sessions in this range", "")
+	p.agentList = newListView(p.agentT, "No activity in this range", "This page shows what your agents spent. Numbers appear once an agent has finished a turn, or try a wider date range.")
+	p.sessList = newListView(p.sessionT, "No sessions in this range", "Each time you start an agent it is a session. They are listed here once they have run.")
 	p.tables = qt.NewQStackedWidget2()
 	p.tables.AddWidget(p.agentList.W.QWidget)
 	p.tables.AddWidget(p.sessList.W.QWidget)

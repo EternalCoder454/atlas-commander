@@ -110,7 +110,7 @@ func newObservedPage(a *App) *observedPage {
 	p.table.onSelect = func(string) { p.showSelected(true) }
 	p.table.onSort = p.resort
 	p.list = newListView(p.table, "No Claude Code sessions found",
-		"Sessions you run in a terminal show up here, read-only, from Claude Code's transcripts in "+observed.Root()+".")
+		"Claude Code sessions you start in a terminal show up here to watch, read-only. Run claude anywhere and it appears (looking in "+observed.Root()+").")
 	l.AddWidget2(p.list.W.QWidget, 2)
 
 	p.head = caption("")
