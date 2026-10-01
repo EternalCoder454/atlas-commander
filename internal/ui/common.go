@@ -211,24 +211,47 @@ func setName(w *qt.QWidget, name string) {
 	q.Delete()
 }
 
-// segmented is a row of exclusive buttons, for small choices such as a time
-// range. on is called with the index the user picks.
-func segmented(labels []string, sel int, on func(i int)) *qt.QWidget {
-	w := qt.NewQWidget2()
-	l := qt.NewQHBoxLayout(w)
-	l.SetContentsMargins(0, 0, 0, 0)
-	l.SetSpacing(2)
-	g := qt.NewQButtonGroup2(w.QObject)
-	for i, s := range labels {
-		b := qt.NewQPushButton3(s)
-		b.SetCheckable(true)
-		b.SetChecked(i == sel)
-		setProp(b.QWidget, "seg", true)
-		g.AddButton2(b.QAbstractButton, i)
-		l.AddWidget(b.QWidget)
+// dropdown is a compact choice, as Monitor uses for anything with several
+// answers. on is called with the index the user picks, not when sel is set.
+func dropdown(labels []string, sel int, on func(i int)) *qt.QComboBox {
+	c := qt.NewQComboBox2()
+	c.AddItems(labels)
+	c.SetCurrentIndex(sel)
+	c.OnActivated(on)
+	return c
+}
+
+// commandButton is a flat button for a command bar, as Monitor's are: an icon
+// (when there is one) and a word, filled only on hover.
+func (a *App) commandButton(text, icon, tip string) *qt.QPushButton {
+	b := qt.NewQPushButton3(text)
+	setProp(b.QWidget, "command", true)
+	b.SetToolTip(tip)
+	if icon != "" {
+		a.buttonIcon(b, icon)
 	}
-	g.OnIdClicked(on)
-	return w
+	return b
+}
+
+// agentControls are the Hold, Resume, Stop and Kill commands for the agent
+// id() names, shared by the board's command bar and the detail view so the two
+// cannot drift apart. They do nothing while id() is empty.
+func (a *App) agentControls(id func() string) (hold, resume, stop, kill *qt.QPushButton) {
+	mk := func(text, tip string, f func(id string) error) *qt.QPushButton {
+		b := a.commandButton(text, "", tip)
+		b.OnClicked(func() {
+			if v := id(); v != "" {
+				a.report(f(v))
+			}
+		})
+		return b
+	}
+	hold = mk("Hold", "Stop the agent at its next tool call", a.ctl.Hold)
+	resume = mk("Resume", "Let a held agent continue", a.ctl.Resume)
+	stop = mk("Stop", "End the session after asking the agent to stop", a.ctl.Stop)
+	kill = mk("Kill", "Force-stop the agent's processes now", a.ctl.Kill)
+	setProp(kill.QWidget, "danger", true)
+	return
 }
 
 // statTile is a card with a dim caption over a large monospace figure.

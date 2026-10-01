@@ -40,6 +40,10 @@ func Palette(t Theme) map[string]string {
 type Glass struct {
 	On                bool
 	Frame, Page, Card float64
+	// Clear leaves the window's own background transparent even when the
+	// surfaces are solid: the window is translucent-capable and rounds its own
+	// corners, so what lies outside them must not be painted.
+	Clear bool
 }
 
 // GlassFor returns the opacities for a transparency level ("off", "subtle",
@@ -47,13 +51,13 @@ type Glass struct {
 func GlassFor(level string) Glass {
 	switch level {
 	case "subtle":
-		return Glass{true, 0.90, 0.55, 0.85}
+		return Glass{On: true, Frame: 0.90, Page: 0.55, Card: 0.85}
 	case "medium":
-		return Glass{true, 0.78, 0.45, 0.75}
+		return Glass{On: true, Frame: 0.78, Page: 0.45, Card: 0.75}
 	case "strong":
-		return Glass{true, 0.62, 0.40, 0.65}
+		return Glass{On: true, Frame: 0.62, Page: 0.40, Card: 0.65}
 	}
-	return Glass{false, 1, 1, 1}
+	return Glass{Frame: 1, Page: 1, Card: 1}
 }
 
 // q quotes a font family for a style sheet.
@@ -94,7 +98,7 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 		family = "font-family: " + q(uiFont) + ";"
 	}
 	w("QWidget { color: %s; %s font-size: %dpt; }\n", h("window_fg_color"), family, fontPt)
-	if g.On {
+	if g.On || g.Clear {
 		// The window is translucent: its own background goes, and the frame
 		// and page paint themselves at partial opacity (see Glass).
 		w("QMainWindow, QWidget#centralwidget { background-color: transparent; }\n")
@@ -157,11 +161,16 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 	w("QTableCornerButton::section { background-color: transparent; border: none; }\n")
 	w("QLabel[title=\"true\"] { font-size: %.1fpt; font-weight: 600; }\n", float64(fontPt)*1.45)
 	w("QLabel[figure=\"true\"] { font-size: %.1fpt; }\n", float64(fontPt)*1.6)
-	w("QPushButton[seg=\"true\"] { background-color: transparent; color: %s; }\n", winFg.rgba(0.75))
-	w("QPushButton[seg=\"true\"]:hover { background-color: %s; }\n", hover)
-	w("QPushButton[seg=\"true\"]:checked { background-color: %s; color: %s; }\n", winFg.rgba(0.12), h("window_fg_color"))
 	w("QWidget#header QToolButton { background-color: transparent; min-height: 0; padding: 4px 8px; }\n")
 	w("QWidget#header QToolButton:hover { background-color: %s; }\n", winFg.rgba(0.08))
+	// Monitor's command bar: flat commands, an icon and a word each, filled
+	// only on hover.
+	w("QPushButton[command=\"true\"] { background-color: transparent; padding: %dpx %dpx; }\n", pad/2+1, pad+2)
+	w("QPushButton[command=\"true\"]:hover { background-color: %s; }\n", winFg.rgba(0.08))
+	w("QPushButton[command=\"true\"]:pressed { background-color: %s; }\n", winFg.rgba(0.12))
+	w("QPushButton[command=\"true\"]:disabled { background-color: transparent; }\n")
+	w("QPushButton[command=\"true\"][danger=\"true\"] { background-color: transparent; }\n")
+	w("QPushButton[command=\"true\"][danger=\"true\"]:hover { background-color: %s; }\n", c("error_color").rgba(0.15))
 
 	// Buttons are flat; the accent variant is the only filled one.
 	// A transparent border the focus ring can colour in, so a button doesn't
@@ -185,10 +194,18 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 	// Inputs.
 	in := fmt.Sprintf("background-color: %s; color: %s; border: %s; border-radius: %dpx; padding: %dpx %dpx; selection-background-color: %s; selection-color: %s;",
 		winFg.rgba(0.04), h("window_fg_color"), hairA, rs, pad/2, pad, accent.rgba(0.35), h("window_fg_color"))
-	w("QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox { %s }\n", in)
-	w("QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border: 1px solid %s; }\n", h("accent_bg_color"))
+	w("QLineEdit, QTextEdit, QPlainTextEdit, QComboBox:editable, QSpinBox, QDoubleSpinBox { %s }\n", in)
+	w("QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:editable:focus, QSpinBox:focus, QDoubleSpinBox:focus { border: 1px solid %s; }\n", h("accent_bg_color"))
 	w("QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled, QComboBox:disabled, QSpinBox:disabled { color: %s; }\n", winFg.rgba(0.4))
-	w("QComboBox::drop-down { border: none; width: %dpx; }\n", pad*2+4)
+	// Monitor's dropdown: no box, just the choice and a chevron, with a faint
+	// fill on hover. An editable one keeps the input look above.
+	w("QComboBox { background-color: transparent; color: %s; border: 1px solid transparent; border-radius: %dpx; padding: %dpx %dpx %dpx %dpx; }\n", h("window_fg_color"), rs, pad/2, pad/2+2, pad/2, pad)
+	w("QComboBox:hover:!editable, QComboBox:on:!editable { background-color: %s; }\n", hover)
+	w("QComboBox:focus:!editable { border: 1px solid %s; }\n", h("accent_bg_color"))
+	w("QComboBox::drop-down { border: none; width: %dpx; subcontrol-origin: padding; subcontrol-position: center right; }\n", pad*2+4)
+	if IndicatorDir != "" {
+		w("QComboBox::down-arrow { image: url(%s); width: 16px; height: 16px; }\n", chevronPath(h("window_fg_color")))
+	}
 	w("QComboBox QAbstractItemView { background-color: %s; color: %s; border: %s; selection-background-color: %s; selection-color: %s; outline: 0; }\n",
 		h("popover_bg_color"), h("popover_fg_color"), hair, sel, h("popover_fg_color"))
 	w("QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { border: none; width: %dpx; background: transparent; }\n", pad*2)

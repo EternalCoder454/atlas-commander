@@ -58,9 +58,18 @@ type App struct {
 	current string
 
 	header struct {
-		spend   *liveLabel
-		killAll *qt.QPushButton
+		row      *qt.QHBoxLayout // the header's one row of widgets
+		updateAt int             // insert the "Update available" button here, left of the spend label
+		spend    *liveLabel
+		killAll  *qt.QPushButton
+		max      *winButton
 	}
+
+	// Window chrome (see titlebar.go): the root widget's margin is the resize
+	// grip, and both it and the corner rounding go when maximised.
+	rootLayout *qt.QVBoxLayout
+	chromeMax  bool
+	chromeSet  bool
 
 	glass theme.Glass // opacities in force; solid unless transparency is on and available
 	frame *qt.QWidget // the window's surface under the header, sidebar and sheet
@@ -210,7 +219,11 @@ func (a *App) applyTheme() {
 	if err := theme.WriteIndicators(a.theme.Colors["accent_fg_color"]); err != nil {
 		fmt.Fprintln(os.Stderr, "atlas-commander: style:", err)
 	}
+	if err := theme.WriteChevron(a.theme.Filled().Colors["window_fg_color"]); err != nil {
+		fmt.Fprintln(os.Stderr, "atlas-commander: style:", err)
+	}
 	a.glass = a.effectiveGlass()
+	a.glass.Clear = transparencyPlatform()
 	qss := theme.QSS(a.theme, a.metrics, a.settings.UIFont, a.mono, a.settings.FontSize, a.glass)
 	if qss != a.qss {
 		a.qss = qss
@@ -283,6 +296,8 @@ func tokensFromTheme(t theme.Theme) Tokens {
 // colour, and the page sheet holding the stacked views.
 func (a *App) build() {
 	a.win = qt.NewQMainWindow2()
+	// Commander draws its own title bar (the header), as Monitor does.
+	a.win.SetWindowFlags(qt.Window | qt.FramelessWindowHint)
 	a.win.SetWindowTitle("Atlas Commander")
 	a.win.SetMinimumSize2(config.MinWindowWidth, config.MinWindowHeight)
 	winIcon := markIcon()
@@ -303,12 +318,29 @@ func (a *App) build() {
 	setName(frame, "frame")
 	frame.OnPaintEvent(func(super func(*qt.QPaintEvent), ev *qt.QPaintEvent) {
 		painter := qt.NewQPainter2(frame.QPaintDevice)
+		painter.SetRenderHint(qt.QPainter__Antialiasing)
 		c := a.pal.frame.q(a.glass.Frame)
-		painter.FillRect6(frame.Rect(), c)
+		b := qt.NewQBrush3(c)
+		path := qt.NewQPainterPath()
+		cr := a.corner()
+		path.AddRoundedRect2(0, 0, float64(frame.Width()), float64(frame.Height()), cr, cr)
+		painter.FillPath(path, b)
+		path.Delete()
+		b.Delete()
 		c.Delete()
 		painter.End()
 		painter.Delete()
 	})
+	arrow := qt.NewQCursor2(qt.ArrowCursor)
+	frame.SetCursor(arrow)
+	arrow.Delete()
+	// The root holds the frame inset by the resize grip. It is transparent
+	// where the window is translucent, so the grip is invisible there.
+	root := qt.NewQWidget2()
+	a.rootLayout = qt.NewQVBoxLayout(root)
+	a.rootLayout.SetSpacing(0)
+	a.rootLayout.AddWidget(frame)
+	a.makeResizable(root)
 	outer := qt.NewQVBoxLayout(frame)
 	outer.SetContentsMargins(0, 0, 0, 0)
 	outer.SetSpacing(0)
@@ -332,7 +364,12 @@ func (a *App) build() {
 	body.AddWidget(a.sheet)
 	outer.AddLayout(body.QLayout)
 
-	a.win.SetCentralWidget(frame)
+	a.win.SetCentralWidget(root)
+	a.syncChrome()
+	a.win.OnResizeEvent(func(super func(*qt.QResizeEvent), ev *qt.QResizeEvent) {
+		super(ev)
+		a.syncChrome()
+	})
 
 	a.addPage("board", newBoardPage(a))
 
@@ -356,8 +393,10 @@ func (a *App) buildHeader() *qt.QWidget {
 	h := qt.NewQWidget2()
 	setName(h, "header")
 	h.SetFixedHeight(47)
+	a.dragHeader(h)
 	l := qt.NewQHBoxLayout(h)
-	l.SetContentsMargins(10, 0, 10, 0)
+	a.header.row = l
+	l.SetContentsMargins(10, 0, 12, 0)
 	l.SetSpacing(8)
 
 	l.AddSpacing(12)
@@ -370,6 +409,9 @@ func (a *App) buildHeader() *qt.QWidget {
 	l.AddWidget(ver.QWidget)
 	l.AddStretch()
 
+	// The "Update available" button goes in here, before the spend label.
+	a.header.updateAt = l.Count()
+
 	a.header.spend = newLiveLabel("")
 	a.header.spend.L.SetProperty("mono", qt.NewQVariant8(true))
 	a.header.spend.L.SetProperty("caption", qt.NewQVariant8(true))
@@ -381,6 +423,14 @@ func (a *App) buildHeader() *qt.QWidget {
 	a.header.killAll.SetToolTip("Stop every running agent at once")
 	a.header.killAll.OnClicked(a.confirmKillAll)
 	l.AddWidget(a.header.killAll.QWidget)
+
+	l.AddSpacing(6)
+	min := a.newWinButton("minimize", "Minimise", a.win.ShowMinimized)
+	a.header.max = a.newWinButton("maximize", "Maximise", a.toggleMaximize)
+	closeBtn := a.newWinButton("close", "Close", func() { a.win.Close() })
+	for _, b := range []*winButton{min, a.header.max, closeBtn} {
+		l.AddWidget(b.w)
+	}
 	return h
 }
 

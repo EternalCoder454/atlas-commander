@@ -214,26 +214,26 @@ func (b *boardPage) widget() *qt.QWidget { return b.w }
 func (b *boardPage) buildCommands() *qt.QHBoxLayout {
 	row := qt.NewQHBoxLayout2()
 	row.SetSpacing(4)
-	mk := func(text, tip string, f func(id string)) *qt.QPushButton {
-		btn := qt.NewQPushButton3(text)
-		btn.SetToolTip(tip)
-		btn.OnClicked(func() {
-			if b.selected != "" {
-				f(b.selected)
-			}
-		})
-		row.AddWidget(btn.QWidget)
-		return btn
+	// There is no pause, stop or block icon in the sets Commander draws from,
+	// so Hold, Resume, Stop and Kill are words only.
+	b.btn.start = b.app.commandButton("Start", "start", "Start a session with a prompt")
+	b.btn.start.OnClicked(func() {
+		if b.selected != "" {
+			b.startAgent(b.selected)
+		}
+	})
+	b.btn.hold, b.btn.resume, b.btn.stop, b.btn.kill = b.app.agentControls(func() string { return b.selected })
+	b.btn.open = b.app.commandButton("Open", "open", "Show the transcript and controls")
+	b.btn.open.OnClicked(func() {
+		if b.selected != "" {
+			b.app.openAgent(b.selected)
+		}
+	})
+	for _, w := range []*qt.QPushButton{b.btn.start, b.btn.hold, b.btn.resume, b.btn.stop, b.btn.kill} {
+		row.AddWidget(w.QWidget)
 	}
-	ctl := b.app.ctl
-	b.btn.start = mk("Start", "Start a session with a prompt", b.startAgent)
-	b.btn.hold = mk("Hold", "Stop the agent at its next tool call", func(id string) { b.app.report(ctl.Hold(id)) })
-	b.btn.resume = mk("Resume", "Let a held agent continue", func(id string) { b.app.report(ctl.Resume(id)) })
-	b.btn.stop = mk("Stop", "End the session after asking the agent to stop", func(id string) { b.app.report(ctl.Stop(id)) })
-	b.btn.kill = mk("Kill", "Force-stop the agent's processes now", func(id string) { b.app.report(ctl.Kill(id)) })
-	setProp(b.btn.kill.QWidget, "danger", true)
 	row.AddStretch()
-	b.btn.open = mk("Open", "Show the transcript and controls", b.app.openAgent)
+	row.AddWidget(b.btn.open.QWidget)
 	return row
 }
 

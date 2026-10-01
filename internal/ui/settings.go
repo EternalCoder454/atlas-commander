@@ -62,7 +62,6 @@ const (
 	settingIconStart = 18
 	settingIconEnd   = 16
 	settingIndent    = settingIconStart + settingIconSize + settingIconEnd
-	settingMaxWidth  = 1000
 )
 
 // accentChoices are GNOME's accent colours, the set Monitor offers.
@@ -84,19 +83,10 @@ func newSettingsPage(a *App) *settingsPage {
 	setProp(scroll.QWidget, "page", true)
 	outer.AddWidget(scroll.QWidget)
 
-	// Wide enough for Task Manager's long rows, but not so wide on a
-	// maximised window that a title and its control end up a screen apart.
+	// Full width, as in Monitor: the cards run to the page's margins.
 	inner := qt.NewQWidget2()
-	row := qt.NewQHBoxLayout(inner)
-	row.SetContentsMargins(24, 18, 24, 24)
-	row.AddStretch()
-	colW := qt.NewQWidget2()
-	colW.SetMaximumWidth(settingMaxWidth)
-	colW.SetSizePolicy2(qt.QSizePolicy__Expanding, qt.QSizePolicy__Preferred)
-	row.AddWidget2(colW, 100)
-	row.AddStretch()
-	p.col = qt.NewQVBoxLayout(colW)
-	p.col.SetContentsMargins(0, 0, 0, 0)
+	p.col = qt.NewQVBoxLayout(inner)
+	p.col.SetContentsMargins(24, 18, 24, 24)
 	p.col.SetSpacing(6)
 	scroll.SetWidget(inner)
 
@@ -587,11 +577,11 @@ func (p *settingsPage) accentCard() {
 func (p *settingsPage) densityCard() {
 	s := p.settings()
 	densIdx := max(0, slices.Index(config.DensityChoices, s.Density))
-	density := segmented([]string{"Comfortable", "Compact"}, densIdx, func(i int) {
+	density := dropdown([]string{"Comfortable", "Compact"}, densIdx, func(i int) {
 		s.Density = config.DensityChoices[i]
 		p.retheme()
 	})
-	p.card().head("density", "Density", "How tall rows are. Compact fits more agents on the board.", density)
+	p.card().head("density", "Density", "How tall rows are. Compact fits more agents on the board.", density.QWidget)
 }
 
 // transparencyCard sets how much the desktop shows through the window. Where
@@ -600,16 +590,16 @@ func (p *settingsPage) transparencyCard() {
 	s := p.settings()
 	labels := []string{"Off", "Subtle", "Medium", "Strong"}
 	idx := max(0, slices.Index(config.TransparencyChoices, s.Transparency))
-	seg := segmented(labels, idx, func(i int) {
+	level := dropdown(labels, idx, func(i int) {
 		s.Transparency = config.TransparencyChoices[i]
 		p.retheme()
 	})
 	sub := "Lets the desktop show through the window. Text and charts stay solid."
 	if ok, why := transparencyAvailable(); !ok {
 		sub = why
-		seg.SetEnabled(false)
+		level.SetEnabled(false)
 	}
-	p.card().head("opacity", "Window transparency", sub, seg)
+	p.card().head("opacity", "Window transparency", sub, level.QWidget)
 }
 
 func (p *settingsPage) introCard() {
@@ -841,7 +831,7 @@ func showKeyState(l *qt.QLabel, env string) {
 
 func (p *settingsPage) aboutCards() {
 	p.card().head("atlas", "Atlas Commander",
-		"Version "+strings.TrimSpace(p.app.version)+" · MIT License. Run, watch and govern a fleet of Claude agents from one window.")
+		"Version "+strings.TrimSpace(p.app.version)+" · MIT License. Run, watch and govern a fleet of AI agents from one window.")
 
 	c := p.card()
 	c.head("folder", "Where Commander keeps things", "Select a path to copy it.")
