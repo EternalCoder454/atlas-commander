@@ -12,3 +12,6 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Analytics for cost, tokens and success rate, and an audit log that can only be added to
 - Observed view of Claude Code sessions you started somewhere else, read-only
 - Themes, with a theme editor; runs on Linux and Windows
+- Agents can now use OpenAI, Gemini or a local model through Ollama, as well as Claude Code
+- The agent editor lists the models each provider offers
+- The Claude API provider is gone; agents that used it need another provider chosen

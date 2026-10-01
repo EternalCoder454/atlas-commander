@@ -40,6 +40,9 @@ type Options struct {
 	Instance string
 	// Setup reports what is installed; nil means nothing is known.
 	Setup func() SetupInfo
+	// Models lists the models a chat provider offers; nil means none are
+	// known. It may block on the network.
+	Models func(backend string) ([]string, error)
 }
 
 const (
@@ -325,6 +328,15 @@ func (s *Supervisor) Setup() SetupInfo {
 		return s.o.Setup()
 	}
 	return SetupInfo{}
+}
+
+// Models lists the models a provider offers. It can block on the network, so
+// call it from a goroutine, never the UI thread.
+func (s *Supervisor) Models(backend string) ([]string, error) {
+	if s.o.Models == nil {
+		return nil, errors.New("This provider can't list its models.")
+	}
+	return s.o.Models(backend)
 }
 
 // Close stops every session (politely for 5 s, then by force), flushes the

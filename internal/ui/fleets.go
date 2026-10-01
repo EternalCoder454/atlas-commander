@@ -238,8 +238,15 @@ func (p *fleetsPage) cell(r, c int) cell {
 		return cell{text: ag.Name}
 	case 2:
 		m := strings.TrimPrefix(ag.Model, "claude-")
-		if ag.Backend == agent.BackendClaudeAPI {
-			m += " · api"
+		switch ag.Backend {
+		case agent.BackendOpenAI:
+			m += " · OpenAI"
+		case agent.BackendGemini:
+			m += " · Gemini"
+		case agent.BackendLocal:
+			m += " · local"
+		case fleet.LegacyClaudeAPI:
+			m += " · removed"
 		}
 		return cell{text: m, alpha: 0.8}
 	case 3:
@@ -525,6 +532,26 @@ var approvalTools = []string{"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit
 // modelChoices are offered in the model box; any other id can be typed.
 var modelChoices = []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5", "claude-fable-5-1"}
 
+// providerChoices are the providers in the editor, in the order they are
+// shown. Index 0 is Claude Code, the only one that runs tools.
+var providerChoices = []struct{ backend, label string }{
+	{agent.BackendClaudeCode, "Claude Code"},
+	{agent.BackendOpenAI, "OpenAI"},
+	{agent.BackendGemini, "Gemini"},
+	{agent.BackendLocal, "Local"},
+}
+
+// providerIndex is the position of a backend in providerChoices. A backend the
+// editor does not offer, such as the removed Claude API, gives Claude Code.
+func providerIndex(backend string) int {
+	for i, p := range providerChoices {
+		if p.backend == backend {
+			return i
+		}
+	}
+	return 0
+}
+
 // editAgent is the registration form, for a new agent (id "") in fleetID, or
 // to change an existing one.
 func (a *App) editAgent(id, fleetID string) {
@@ -579,7 +606,11 @@ func (a *App) editAgent(id, fleetID string) {
 		return fleet.FleetView{ID: fleetID}
 	}
 
-	backend := segmentedValue([]string{"Claude Code", "Claude API"}, map[bool]int{true: 1}[orig.Backend == agent.BackendClaudeAPI])
+	labels := make([]string, len(providerChoices))
+	for i, p := range providerChoices {
+		labels[i] = p.label
+	}
+	backend := segmentedValue(labels, providerIndex(orig.Backend))
 	form.AddRow3("Runs on", backend.w)
 	backendNote := caption("")
 	backendNote.SetWordWrap(true)
@@ -590,7 +621,11 @@ func (a *App) editAgent(id, fleetID string) {
 	model.AddItems(modelChoices)
 	model.SetCurrentText(orig.Model)
 	setProp(model.QWidget, "mono", true)
+	model.LineEdit().SetPlaceholderText("Pick a model or type its id")
 	form.AddRow3("Model", model.QWidget)
+	modelNote := caption("")
+	modelNote.SetWordWrap(true)
+	form.AddRowWithWidget(modelNote.QWidget)
 
 	dir, dirRow := folderPicker(a, "Agent folder", "")
 	dir.SetText(orig.WorkDir)
@@ -651,18 +686,89 @@ func (a *App) editAgent(id, fleetID string) {
 	al.AddWidget(note.QWidget)
 	form.AddRow3("Needs approval", approve)
 
+	// The model list of a chat provider comes from the network, so it loads
+	// in the background and a timer on this thread picks the result up; the
+	// goroutine never touches a widget. want counts provider switches, so a
+	// list that arrives after the user moved on is dropped.
+	var models bgLoad[[]string]
+	var want uint64
+	started := true
+	loadModels := func(i int) {
+		want++
+		model.Clear()
+		if i == 0 {
+			model.AddItems(modelChoices)
+			modelNote.SetText("")
+			started = true
+			return
+		}
+		modelNote.SetText("Loading models…")
+		started = false
+	}
+	timer := qt.NewQTimer2(dlg.QObject)
+	timer.OnTimeout(func() {
+		cur := backend.sel
+		if cur == 0 {
+			return
+		}
+		if list, err, ok := models.take(want); ok {
+			switch {
+			case err != nil:
+				modelNote.SetText(err.Error() + " You can still type a model id.")
+			case len(list) == 0:
+				modelNote.SetText("No models found. You can type a model id.")
+			default:
+				typed := model.CurrentText()
+				model.AddItems(list)
+				model.SetCurrentText(typed)
+				if strings.TrimSpace(typed) == "" {
+					model.SetCurrentText(list[0])
+				}
+				modelNote.SetText("")
+			}
+		}
+		if !started {
+			name, gen := providerChoices[cur].backend, want
+			started = models.start(gen, func() ([]string, error) { return a.ctl.Models(name) })
+		}
+	})
+	timer.Start(150)
+
 	setBackend := func(i int) {
-		api := i == 1
-		worktree.SetEnabled(!api)
-		approve.SetEnabled(!api)
-		if api {
-			backendNote.SetText("Calls the Messages API with the key from $" + a.settings.APIKeyEnv + ". It answers in text and does not run tools.")
-		} else {
+		chat := i != 0
+		worktree.SetEnabled(!chat)
+		approve.SetEnabled(!chat)
+		worktree.SetVisible(!chat)
+		approve.SetVisible(!chat)
+		form.LabelForField(approve).SetVisible(!chat)
+		switch providerChoices[i].backend {
+		case agent.BackendOpenAI:
+			backendNote.SetText("Chats with OpenAI using the key in $" + a.settings.OpenAIKeyEnv + ". It answers in text and does not run tools.")
+		case agent.BackendGemini:
+			backendNote.SetText("Chats with Google Gemini using the key in $" + a.settings.GeminiKeyEnv + ". It answers in text and does not run tools.")
+		case agent.BackendLocal:
+			backendNote.SetText("Runs on this machine through Ollama and costs nothing. It answers in text and does not run tools.")
+		default:
 			backendNote.SetText("Runs the claude CLI in the folder below, with your Claude Code login, settings and tools.")
 		}
 	}
-	backend.on = setBackend
+	backend.on = func(i int) {
+		setBackend(i)
+		loadModels(i)
+		// Keep the saved model when coming back to the saved provider;
+		// otherwise start from a sensible one (Claude) or the loaded list.
+		switch {
+		case providerChoices[i].backend == orig.Backend:
+			model.SetCurrentText(orig.Model)
+		case i == 0:
+			model.SetCurrentText(modelChoices[1])
+		}
+	}
 	setBackend(backend.sel)
+	if backend.sel != 0 {
+		loadModels(backend.sel)
+		model.SetCurrentText(orig.Model)
+	}
 
 	buttons := qt.NewQDialogButtonBox4(qt.QDialogButtonBox__Ok | qt.QDialogButtonBox__Cancel)
 	ok := buttons.Button(qt.QDialogButtonBox__Ok)
@@ -677,7 +783,7 @@ func (a *App) editAgent(id, fleetID string) {
 		c := fleet.AgentConfig{
 			FleetID:      fid,
 			Name:         strings.TrimSpace(name.Text()),
-			Backend:      []string{agent.BackendClaudeCode, agent.BackendClaudeAPI}[backend.sel],
+			Backend:      providerChoices[backend.sel].backend,
 			Model:        strings.TrimSpace(model.CurrentText()),
 			WorkDir:      strings.TrimSpace(dir.Text()),
 			PinnedPrompt: strings.TrimSpace(pinned.ToPlainText()),
@@ -685,9 +791,9 @@ func (a *App) editAgent(id, fleetID string) {
 			UseWorktree:  worktree.IsChecked(),
 			Approve:      []string{},
 		}
-		if c.Backend == agent.BackendClaudeAPI {
-			// The API backend runs no tools and has no folder of its own
-			// to branch: the greyed-out choices are not sent.
+		if c.Backend != agent.BackendClaudeCode {
+			// Chat providers run no tools and have no folder of their own
+			// to branch: the hidden choices are not sent.
 			c.UseWorktree = false
 			c.Approve = slices.Clone(orig.Approve)
 			if c.Approve == nil {

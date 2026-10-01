@@ -67,15 +67,6 @@ modernc.org/libc runtime, under the same BSD 3-Clause License.
 
     Copyright (c) the modernc.org/sqlite Authors. All rights reserved.
 
---------------------------------------------------------------------------------
-anthropic-sdk-go
---------------------------------------------------------------------------------
-
-The Anthropic Go SDK, github.com/anthropics/anthropic-sdk-go, used under the
-MIT License.
-
-    Copyright (c) Anthropic, PBC
-
-The module dependencies that SDK and the driver bring in each carry their own
+The module dependencies that the driver brings in each carry their own
 permissive licence (MIT, BSD or Apache 2.0); their notices are in their module
 sources, which `go mod download` fetches.

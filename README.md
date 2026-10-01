@@ -73,6 +73,26 @@ it anywhere and run `atlas-commander.exe`. The zip carries Qt and everything it
 needs. If it does not start, run `atlas-commander-console.exe` from a terminal in
 the same folder to see why. Keep `atlas-hook.exe` next to it.
 
+## Providers
+
+Each agent picks one provider when you create it:
+
+- **Claude Code** runs the `claude` command on your machine. It can edit files
+  and run commands, and asks for approval first.
+- **OpenAI** and **Gemini** chat with the model over the internet using your key.
+  Commander reads the key from an environment variable (`OPENAI_API_KEY` and
+  `GEMINI_API_KEY` by default; change the names in Settings, then Providers).
+  The key is never stored by Commander.
+- **Local** chats with a model on this machine through
+  [Ollama](https://ollama.com), which must be running (default
+  `http://127.0.0.1:11434`). It is free and nothing leaves your computer.
+
+OpenAI, Gemini and Local agents only answer in text: they run no tools, so there
+are no approvals or worktrees for them. Local models cost nothing. Commander
+ships no prices for OpenAI or Gemini models, so their cost shows as $0 and a cost
+cap can't be enforced on them until you add the model to `prices.json` (see
+[Where your data lives](#where-your-data-lives)).
+
 ## How approvals work
 
 Commander starts Claude Code headless and registers `atlas-hook` as its
@@ -98,7 +118,7 @@ is in a private per-user directory, not on the network.
 
 `ATLAS_CONFIG_HOME`, `ATLAS_DATA_HOME` and `ATLAS_RUNTIME_DIR` move all of it,
 which is how the tests and headless runs stay away from real data. Nothing is
-sent anywhere except the requests the agents themselves make to Claude.
+sent anywhere except the requests the agents themselves make to their provider.
 
 ## Build from source
 
@@ -151,7 +171,7 @@ changed.
 ```
 cmd/atlas-commander/   the Qt application
 cmd/atlas-hook/        the PreToolUse hook helper (no Qt)
-internal/agent/        backend contract; Claude Code and Claude API backends
+internal/agent/        backend contract; Claude Code backend, and chat (OpenAI, Gemini, Ollama)
 internal/fleet/        supervisor: backends, gate, store, cost caps
 internal/gate/         local socket the hook talks to
 internal/store/        SQLite store and the append-only audit log

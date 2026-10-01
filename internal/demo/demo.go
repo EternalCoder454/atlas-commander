@@ -57,6 +57,9 @@ func New() *Fleet {
 		mk("a5", "lint-sweep", "web", "claude-haiku-4-5", "", "", fleet.StatusIdle, 0.05, 1),
 		mk("a6", "perf-probe", "web", "claude-opus-5-5", "Profile the dashboard render path", "atlas/perf-probe-a6", fleet.StatusHeld, 2.25, 0),
 	}
+	// One agent on a local model, so the demo shows a non-Claude provider.
+	f.agents[4].Backend, f.agents[4].Model = agent.BackendLocal, "qwen3:8b"
+	f.agents[4].CostUSD, f.agents[4].SessionCost, f.agents[4].CapUSD = 0, 0, 0
 	f.agents[3].Error = "Process exited with code 1: API rate limit"
 	f.agents[2].LastTool = "Bash: go run ./cmd/migrate -dry-run"
 	f.agents[0].LastTool = "Edit: internal/auth/session.go"

@@ -61,5 +61,8 @@ type Controller interface {
 	ObservedTranscript(path string) ([]observed.Line, error)
 
 	Setup() fleet.SetupInfo
+	// Models lists a provider's models. It may block on the network: call it
+	// only from a background goroutine.
+	Models(backend string) ([]string, error)
 	SetNotifier(func(fleet.Notice))
 }

@@ -23,7 +23,7 @@ import (
 
 	atlascommander "atlas-commander"
 	"atlas-commander/internal/agent"
-	"atlas-commander/internal/agent/claudeapi"
+	"atlas-commander/internal/agent/chat"
 	"atlas-commander/internal/agent/claudecode"
 	"atlas-commander/internal/config"
 	"atlas-commander/internal/demo"
@@ -124,11 +124,16 @@ func run(settings config.Settings) int {
 				HookTimeout: hookTimeout,
 				NewGroup:    procgroup.New,
 			}),
-			agent.BackendClaudeAPI: claudeapi.New(claudeapi.Options{APIKey: os.Getenv(settings.APIKeyEnv)}),
+			agent.BackendOpenAI: chat.New(chatOptions(settings, agent.BackendOpenAI)),
+			agent.BackendGemini: chat.New(chatOptions(settings, agent.BackendGemini)),
+			agent.BackendLocal:  chat.New(chatOptions(settings, agent.BackendLocal)),
 		},
 		WorktreeRoot: paths.Worktrees(),
 		Instance:     instance,
 		Setup:        setup.get,
+		Models: func(backend string) ([]string, error) {
+			return chat.Models(context.Background(), chatOptions(settings, backend))
+		},
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "atlas-commander:", err)
@@ -184,6 +189,20 @@ func hookPath() string {
 	return p
 }
 
+// chatOptions is the configuration of one chat provider from the settings.
+// Keys are read from the environment here, once, so they are never stored.
+func chatOptions(s config.Settings, backend string) chat.Options {
+	switch backend {
+	case agent.BackendOpenAI:
+		return chat.Options{Name: backend, BaseURL: "https://api.openai.com/v1",
+			APIKey: os.Getenv(s.OpenAIKeyEnv), KeyEnv: s.OpenAIKeyEnv, DefaultModel: "gpt-5"}
+	case agent.BackendGemini:
+		return chat.Options{Name: backend, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+			APIKey: os.Getenv(s.GeminiKeyEnv), KeyEnv: s.GeminiKeyEnv, DefaultModel: "gemini-2.5-pro"}
+	}
+	return chat.Options{Name: agent.BackendLocal, BaseURL: s.OllamaURL + "/v1", DefaultModel: "qwen3:8b"}
+}
+
 // setupCache answers Setup from the last check and, when that is stale,
 // refreshes in the background: checking runs claude --version, which can
 // take seconds, and the UI asks from the Qt thread.
@@ -195,7 +214,21 @@ type setupCache struct {
 	info    fleet.SetupInfo
 	at      time.Time
 	running bool
+
+	// The Ollama probe is a network call with its own, shorter age.
+	ollama        ollamaState
+	ollamaAt      time.Time
+	ollamaRunning bool
 }
+
+// ollamaState is the last answer from probing Ollama.
+type ollamaState struct {
+	checked, reachable bool
+	models             int
+}
+
+// ollamaMaxAge keeps the Local card fresh without probing every 250 ms tick.
+const ollamaMaxAge = 5 * time.Second
 
 // setupMaxAge is how old an answer may be before a call starts a new check.
 const setupMaxAge = 15 * time.Second
@@ -212,8 +245,11 @@ func (c *setupCache) check() fleet.SetupInfo {
 		ClaudePath:    d.Path,
 		ClaudeVersion: d.Version,
 		Problems:      d.Problems,
-		APIKeyEnv:     c.settings.APIKeyEnv,
-		APIKeySet:     os.Getenv(c.settings.APIKeyEnv) != "",
+		OpenAIKeyEnv:  c.settings.OpenAIKeyEnv,
+		OpenAIKeySet:  os.Getenv(c.settings.OpenAIKeyEnv) != "",
+		GeminiKeyEnv:  c.settings.GeminiKeyEnv,
+		GeminiKeySet:  os.Getenv(c.settings.GeminiKeyEnv) != "",
+		OllamaURL:     c.settings.OllamaURL,
 	}
 	if c.hook == "" {
 		info.Problems = append(info.Problems, "atlas-hook is missing from Commander's folder, so tool approvals can't work. Reinstall Atlas Commander.")
@@ -221,9 +257,27 @@ func (c *setupCache) check() fleet.SetupInfo {
 	return info
 }
 
+// probeOllama asks Ollama for its models in the background; the answer lands
+// in the cache for a later get.
+func (c *setupCache) probeOllama() {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		models, err := chat.Models(ctx, chatOptions(c.settings, agent.BackendLocal))
+		c.mu.Lock()
+		c.ollama = ollamaState{checked: true, reachable: err == nil, models: len(models)}
+		c.ollamaAt, c.ollamaRunning = time.Now(), false
+		c.mu.Unlock()
+	}()
+}
+
 func (c *setupCache) get() fleet.SetupInfo {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.ollamaRunning && time.Since(c.ollamaAt) > ollamaMaxAge {
+		c.ollamaRunning = true
+		c.probeOllama()
+	}
 	if !c.running && time.Since(c.at) > setupMaxAge {
 		c.running = true
 		go func() {
@@ -233,7 +287,9 @@ func (c *setupCache) get() fleet.SetupInfo {
 			c.mu.Unlock()
 		}()
 	}
-	return c.info
+	info := c.info
+	info.OllamaChecked, info.OllamaReachable, info.OllamaModels = c.ollama.checked, c.ollama.reachable, c.ollama.models
+	return info
 }
 
 func warn(err error) { fmt.Fprintln(os.Stderr, "atlas-commander:", err) }
