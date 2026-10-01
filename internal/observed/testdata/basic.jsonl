@@ -1,0 +1,13 @@
+{"type":"file-history-snapshot","messageId":"m0"}
+{"type":"user","isMeta":true,"timestamp":"2026-10-01T03:41:00.000Z","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"<local-command-caveat>ignore</local-command-caveat>"}}
+{"type":"user","timestamp":"2026-10-01T03:41:00.000Z","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"user","timestamp":"2026-10-01T03:41:00.000Z","cwd":"/tmp/proj","gitBranch":"main","message":{"role":"user","content":"Fix the login bug"}}
+this is not json
+{"type":"assistant","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"assistant","model":"claude-test-1","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"Looking."},{"type":"tool_use","name":"Bash","input":{"command":"ls -la"}}]}}
+{"type":"user","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"user","content":[{"type":"tool_result","content":"files","is_error":false}]}}
+{"type":"assistant","isSidechain":true,"timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"assistant","model":"side","content":[{"type":"text","text":"sub"}]}}
+{"type":"assistant","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"assistant","model":"claude-test-1","content":[{"type":"tool_use","name":"Grep","input":{"pattern":"TODO","path":"."}}]}}
+{"type":"user","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"user","content":[{"type":"tool_result","content":[{"type":"text","text":"boom"}],"is_error":true}]}}
+{"type":"assistant","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"assistant","model":"claude-test-1","content":[{"type":"tool_use","name":"Weird","input":{"a":"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}}]}}
+{"type":"assistant","timestamp":"2026-10-01T03:41:00.000Z","message":{"role":"assistant","model":"claude-test-1","content":"Done."}}
+{"type":"system","subtype":"compact_boundary","content":"Conversation compacted","timestamp":"2026-10-01T03:41:00.000Z"}

@@ -1,0 +1,30 @@
+{
+  "id": "nord",
+  "name": "Nord",
+  "summary": "Cool blue-grey, low contrast",
+  "dark": true,
+  "primary": "#2e3440",
+  "secondary": "#88c0d0",
+  "colors": {
+    "window_bg_color": "#2e3440",
+    "window_fg_color": "#eceff4",
+    "view_bg_color": "#272c36",
+    "view_fg_color": "#eceff4",
+    "sidebar_bg_color": "#292e39",
+    "sidebar_fg_color": "#eceff4",
+    "headerbar_bg_color": "#2e3440",
+    "headerbar_fg_color": "#eceff4",
+    "card_bg_color": "#3b4252",
+    "card_fg_color": "#eceff4",
+    "dialog_bg_color": "#2e3440",
+    "dialog_fg_color": "#eceff4",
+    "popover_bg_color": "#3b4252",
+    "popover_fg_color": "#eceff4",
+    "accent_bg_color": "#88c0d0",
+    "accent_fg_color": "#2e3440",
+    "accent_color": "#88c0d0",
+    "warning_color": "#ebcb8b",
+    "error_color": "#bf616a",
+    "success_color": "#a3be8c"
+  }
+}
