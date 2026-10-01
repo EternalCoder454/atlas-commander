@@ -88,7 +88,7 @@ func newTasksPage(a *App) *tasksPage {
 	p.table.onActivate = func(id string) { p.editTask(id) }
 	p.table.onSort = p.resort
 	p.list = newListView(p.table, "No tasks yet",
-		"Add tasks with New task. A task is ready once everything it waits on is done; dispatch it to an agent in its fleet.")
+		"Tasks are jobs waiting for an agent. Choose New task to add one, then send it to an agent in its fleet.")
 	l.AddWidget(p.list.W.QWidget)
 	p.updateButtons()
 	return p

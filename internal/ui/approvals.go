@@ -89,8 +89,8 @@ func newApprovalsPage(a *App) *approvalsPage {
 	}
 	p.table.onSelect = func(string) { p.showSelected() }
 	p.table.onActivate = func(string) { p.reason.SetFocus() }
-	p.list = newListView(p.table, "Nothing is waiting for approval",
-		"Tools an agent's gate policy lists (Bash, Write and Edit by default) stop here until you allow or deny them.")
+	p.list = newListView(p.table, "Nothing waiting",
+		"When an agent wants to run a tool you've marked for approval, it shows up here. Allow or deny it, and the agent carries on.")
 	l.AddWidget2(p.list.W.QWidget, 3)
 
 	p.card = qt.NewQFrame2()

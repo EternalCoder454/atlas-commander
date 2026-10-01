@@ -303,7 +303,7 @@ func (a *App) build() {
 	body.SetContentsMargins(0, 0, 0, 0)
 	body.SetSpacing(0)
 
-	a.side = newSidebar(a, a.navItems(), []navItem{{id: "settings", title: "Settings"}})
+	a.side = newSidebar(a, a.navItems(), []navItem{{id: "settings", title: "Settings", tip: "Check Claude Code, change the look and set defaults."}})
 	a.side.onSelect = a.show
 	body.AddWidget(a.side.W)
 
@@ -396,7 +396,7 @@ func (a *App) navItems() []navItem {
 	}
 	return []navItem{
 		{id: "g-fleet", title: "Fleet", group: true},
-		{id: "board", title: "Board", badge: count(func(s *fleet.Snapshot) int {
+		{id: "board", title: "Board", tip: "See every agent at a glance and start, hold or stop them.", badge: count(func(s *fleet.Snapshot) int {
 			n := 0
 			for _, ag := range s.Agents {
 				if ag.Status.Live() {
@@ -405,8 +405,8 @@ func (a *App) navItems() []navItem {
 			}
 			return n
 		})},
-		{id: "approvals", title: "Approvals", badge: count(func(s *fleet.Snapshot) int { return len(s.Approvals) })},
-		{id: "tasks", title: "Tasks", badge: count(func(s *fleet.Snapshot) int {
+		{id: "approvals", title: "Approvals", tip: "Allow or deny tool calls agents are waiting to run.", badge: count(func(s *fleet.Snapshot) int { return len(s.Approvals) })},
+		{id: "tasks", title: "Tasks", tip: "Queue jobs and hand them to agents.", badge: count(func(s *fleet.Snapshot) int {
 			n := 0
 			for _, t := range s.Tasks {
 				if t.Ready {
@@ -415,11 +415,11 @@ func (a *App) navItems() []navItem {
 			}
 			return n
 		})},
-		{id: "fleets", title: "Fleets", badge: count(func(s *fleet.Snapshot) int { return len(s.Fleets) })},
+		{id: "fleets", title: "Fleets", tip: "Group agents by project and set budgets.", badge: count(func(s *fleet.Snapshot) int { return len(s.Fleets) })},
 		{id: "g-insight", title: "Insight", group: true},
-		{id: "analytics", title: "Analytics"},
-		{id: "audit", title: "Audit log"},
-		{id: "observed", title: "Observed"},
+		{id: "analytics", title: "Analytics", tip: "See what your agents have spent and done."},
+		{id: "audit", title: "Audit log", tip: "Read the permanent record of events and decisions."},
+		{id: "observed", title: "Observed", tip: "Watch Claude Code sessions started outside Commander."},
 	}
 }
 
