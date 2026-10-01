@@ -102,7 +102,7 @@ sent anywhere except the requests the agents themselves make to Claude.
 
 ## Build from source
 
-You need Go 1.27 or newer, a C++ compiler, `pkg-config`, `git`, `make` and the
+You need Go 1.26 or newer, a C++ compiler, `pkg-config`, `git`, `make` and the
 Qt 6.5+ development files (`setup.sh` installs these for you):
 
 ```sh

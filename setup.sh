@@ -30,7 +30,7 @@ PREFIX="$HOME/.local"
 DATA="$PREFIX/share/atlas-commander-setup"
 SRC="$DATA/src"
 NEED_QT="6.5"
-NEED_GO="1.27"
+NEED_GO="1.26"
 
 action="install"
 channel=""

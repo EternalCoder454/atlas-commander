@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -622,9 +623,14 @@ func TestAddTaskDepRejectsCrossFleet(t *testing.T) {
 }
 
 // '?' and '#' in a database path would otherwise cut the DSN short and open a
-// different file.
+// different file. Windows forbids '?' in names, so there only '#' and '%' are
+// tried; they cut a DSN short just the same.
 func TestOpenPathWithQueryCharacters(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "we?ird#dir%41", "c.db")
+	name := "we?ird#dir%41"
+	if runtime.GOOS == "windows" {
+		name = "weird#dir%41"
+	}
+	p := filepath.Join(t.TempDir(), name, "c.db")
 	s, err := Open(p)
 	if err != nil {
 		t.Fatal(err)
