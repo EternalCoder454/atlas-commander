@@ -145,7 +145,7 @@ type FleetConfig struct {
 type AgentConfig struct {
 	FleetID      string
 	Name         string
-	Backend      string // agent.BackendClaudeCode or agent.BackendClaudeAPI
+	Backend      string // one of the agent.Backend* names
 	Model        string
 	WorkDir      string // "" uses the fleet's
 	PinnedPrompt string // sent at the start of every session
@@ -179,6 +179,23 @@ type SetupInfo struct {
 	ClaudePath    string
 	ClaudeVersion string
 	Problems      []string // plain sentences; empty means Claude Code is usable
-	APIKeyEnv     string
-	APIKeySet     bool
+
+	// Chat providers. The key itself is never exposed, only whether the
+	// variable is set.
+	OpenAIKeyEnv string
+	OpenAIKeySet bool
+	GeminiKeyEnv string
+	GeminiKeySet bool
+	// OllamaURL is where Local looks for Ollama. OllamaChecked is false until
+	// the first probe has finished; OllamaModels counts what it offers.
+	OllamaURL       string
+	OllamaChecked   bool
+	OllamaReachable bool
+	OllamaModels    int
 }
+
+// LegacyClaudeAPI is the backend name of the removed "Claude API" provider.
+// Agents stored with it are kept, but cannot start.
+const LegacyClaudeAPI = "claude-api"
+
+const claudeAPIRemoved = "Claude API was removed. Edit this agent to pick another provider."

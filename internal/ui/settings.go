@@ -44,7 +44,9 @@ type settingsPage struct {
 
 	setupState *qt.QLabel
 	lastSetup  time.Time
-	keyState   *qt.QLabel
+	openaiKey  *qt.QLabel
+	geminiKey  *qt.QLabel
+	ollamaNow  *qt.QLabel
 
 	// flush applies text typed but not yet confirmed; leaving the page
 	// runs it, as leaving the field would have.
@@ -113,7 +115,7 @@ func newSettingsPage(a *App) *settingsPage {
 	p.section("Notifications")
 	p.notifyCard()
 
-	p.section("Claude")
+	p.section("Providers")
 	p.claudeCards()
 
 	p.section("About")
@@ -733,20 +735,52 @@ func (p *settingsPage) claudeCards() {
 	c.sub("Location", "Leave empty to use the claude on your PATH. Takes effect the next time Commander starts.",
 		path.QWidget, browse.QWidget)
 
-	p.keyState = qt.NewQLabel2()
-	key := p.textField(s.APIKeyEnv, config.Defaults().APIKeyEnv, func(v string) string {
-		if v == "" {
-			v = config.Defaults().APIKeyEnv
-		}
-		s.APIKeyEnv = v
+	p.openaiKey, p.geminiKey = qt.NewQLabel2(), qt.NewQLabel2()
+	p.keyCard("OpenAI", "Chats with OpenAI models using a key.", p.openaiKey, s.OpenAIKeyEnv, config.Defaults().OpenAIKeyEnv,
+		func(v string) { s.OpenAIKeyEnv = v })
+	p.keyCard("Gemini", "Chats with Google Gemini models using a key.", p.geminiKey, s.GeminiKeyEnv, config.Defaults().GeminiKeyEnv,
+		func(v string) { s.GeminiKeyEnv = v })
+
+	p.ollamaNow = qt.NewQLabel2()
+	ollamaAgain := qt.NewQTimer2(p.w.QObject)
+	ollamaAgain.SetSingleShot(true)
+	ollamaAgain.OnTimeout(p.checkSetup)
+	ollamaCheck := p.iconButton("reset", "Check again")
+	ollamaCheck.OnClicked(func() {
+		p.checkSetup()
+		ollamaAgain.Start(1500)
+	})
+	url := p.textField(s.OllamaURL, config.Defaults().OllamaURL, func(v string) string {
+		v = config.NormalizeOllamaURL(v)
+		s.OllamaURL = v
 		p.save()
-		p.showKeyState(v)
 		return v
 	})
-	p.showKeyState(s.APIKeyEnv)
-	p.card().head("key", "API key variable",
-		"Claude API agents read their key from this environment variable; Commander never stores the key. Takes effect the next time Commander starts.",
-		p.keyState.QWidget, key.QWidget)
+	oc := p.card()
+	oc.head("code", "Local (Ollama)",
+		"Runs models on this machine through Ollama, for free. Start Ollama first; the address takes effect the next time Commander starts.",
+		p.ollamaNow.QWidget, ollamaCheck.QWidget)
+	oc.sub("Address", "Where Ollama is listening.", url.QWidget)
+	p.checkSetup()
+}
+
+// keyCard is one provider card: the name of the environment variable that
+// holds the key, and whether that variable is set. Commander never stores the
+// key itself.
+func (p *settingsPage) keyCard(title, blurb string, state *qt.QLabel, env, def string, set func(string)) {
+	field := p.textField(env, def, func(v string) string {
+		if v == "" {
+			v = def
+		}
+		set(v)
+		p.save()
+		showKeyState(state, v)
+		return v
+	})
+	showKeyState(state, env)
+	p.card().head("key", title,
+		blurb+" It reads the key from this environment variable; Commander never stores the key. Takes effect the next time Commander starts.",
+		state.QWidget, field.QWidget)
 }
 
 func (p *settingsPage) checkSetup() {
@@ -770,15 +804,36 @@ func (p *settingsPage) checkSetup() {
 	if p.setupState.ToolTip() != tip {
 		p.setupState.SetToolTip(tip)
 	}
+
+	// The Local card. The probe runs in the background, so before the first
+	// answer there is nothing to claim either way.
+	if p.ollamaNow == nil {
+		return // the Local card is built after the Claude Code one
+	}
+	var ollama, ollamaStatus string
+	switch {
+	case !info.OllamaChecked:
+		ollama, ollamaStatus = "Checking…", "idle"
+	case info.OllamaReachable:
+		ollama, ollamaStatus = "●  Running · "+plural(info.OllamaModels, "model"), "ok"
+	default:
+		ollama, ollamaStatus = "●  Not running", "error"
+	}
+	if p.ollamaNow.Text() != ollama {
+		p.ollamaNow.SetText(ollama)
+		setProp(p.ollamaNow.QWidget, "status", ollamaStatus)
+		p.ollamaNow.SetToolTip(info.OllamaURL)
+	}
 }
 
-func (p *settingsPage) showKeyState(env string) {
+// showKeyState says whether the variable that should hold a key is set.
+func showKeyState(l *qt.QLabel, env string) {
 	if os.Getenv(env) != "" {
-		p.keyState.SetText("Set")
-		setProp(p.keyState.QWidget, "status", "ok")
+		l.SetText("Set")
+		setProp(l.QWidget, "status", "ok")
 	} else {
-		p.keyState.SetText("Not set")
-		setProp(p.keyState.QWidget, "status", "idle")
+		l.SetText("Not set")
+		setProp(l.QWidget, "status", "idle")
 	}
 }
 

@@ -76,8 +76,13 @@ type Settings struct {
 	ShowIntro     bool   `json:"show_intro"`
 	UpdateChannel string `json:"update_channel"`
 	ClaudePath    string `json:"claude_path"` // "" = look on PATH
-	APIKeyEnv     string `json:"api_key_env"` // env var holding the API key
-	DefaultFleet  string `json:"default_fleet"`
+	// OpenAIKeyEnv and GeminiKeyEnv name the environment variables that hold
+	// the keys; the keys themselves are never stored. OllamaURL is where the
+	// Local provider finds Ollama.
+	OpenAIKeyEnv string `json:"openai_key_env"`
+	GeminiKeyEnv string `json:"gemini_key_env"`
+	OllamaURL    string `json:"ollama_url"`
+	DefaultFleet string `json:"default_fleet"`
 }
 
 // Defaults is what a fresh install uses.
@@ -93,7 +98,9 @@ func Defaults() Settings {
 		Notifications: true,
 		ShowIntro:     true,
 		UpdateChannel: "release",
-		APIKeyEnv:     "ANTHROPIC_API_KEY",
+		OpenAIKeyEnv:  "OPENAI_API_KEY",
+		GeminiKeyEnv:  "GEMINI_API_KEY",
+		OllamaURL:     "http://127.0.0.1:11434",
 	}
 }
 
@@ -162,9 +169,29 @@ func (s *Settings) Normalize() {
 	s.WindowHeight = max(s.WindowHeight, MinWindowHeight)
 	s.UpdateChannel = NormalizeUpdateChannel(s.UpdateChannel)
 	s.ClaudePath = strings.TrimSpace(s.ClaudePath)
-	if s.APIKeyEnv = strings.TrimSpace(s.APIKeyEnv); s.APIKeyEnv == "" {
-		s.APIKeyEnv = d.APIKeyEnv
+	if s.OpenAIKeyEnv = strings.TrimSpace(s.OpenAIKeyEnv); s.OpenAIKeyEnv == "" {
+		s.OpenAIKeyEnv = d.OpenAIKeyEnv
 	}
+	if s.GeminiKeyEnv = strings.TrimSpace(s.GeminiKeyEnv); s.GeminiKeyEnv == "" {
+		s.GeminiKeyEnv = d.GeminiKeyEnv
+	}
+	s.OllamaURL = NormalizeOllamaURL(s.OllamaURL)
+}
+
+// NormalizeOllamaURL trims the address, adds http:// when no scheme was typed
+// and drops trailing slashes; an empty or unusable value gives the default.
+func NormalizeOllamaURL(v string) string {
+	v = strings.TrimRight(strings.TrimSpace(v), "/")
+	if v == "" {
+		return Defaults().OllamaURL
+	}
+	if !strings.Contains(v, "://") {
+		v = "http://" + v
+	}
+	if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+		return Defaults().OllamaURL
+	}
+	return v
 }
 
 // Load reads path (paths.Settings() when empty). A missing file gives the

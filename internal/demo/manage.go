@@ -505,7 +505,25 @@ func (f *Fleet) ObservedTranscript(path string) ([]observed.Line, error) {
 }
 
 func (f *Fleet) Setup() fleet.SetupInfo {
-	return fleet.SetupInfo{ClaudePath: "/usr/local/bin/claude", ClaudeVersion: "2.1.274", APIKeyEnv: "ANTHROPIC_API_KEY", APIKeySet: true}
+	return fleet.SetupInfo{
+		ClaudePath: "/usr/local/bin/claude", ClaudeVersion: "2.1.274",
+		OpenAIKeyEnv: "OPENAI_API_KEY", OpenAIKeySet: true,
+		GeminiKeyEnv: "GEMINI_API_KEY", GeminiKeySet: false,
+		OllamaURL: "http://127.0.0.1:11434", OllamaChecked: true, OllamaReachable: true, OllamaModels: 3,
+	}
+}
+
+// Models answers the editor's model picker with a few plausible models.
+func (f *Fleet) Models(backend string) ([]string, error) {
+	switch backend {
+	case agent.BackendLocal:
+		return []string{"gemma3:4b", "llama3.2:3b", "qwen3:8b"}, nil
+	case agent.BackendOpenAI:
+		return []string{"gpt-5", "gpt-5-mini"}, nil
+	case agent.BackendGemini:
+		return []string{"gemini-2.5-flash", "gemini-2.5-pro"}, nil
+	}
+	return nil, errors.New("This provider can't list its models.")
 }
 
 func (f *Fleet) SetNotifier(fn func(fleet.Notice)) {

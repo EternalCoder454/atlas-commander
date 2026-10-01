@@ -1300,3 +1300,23 @@ func TestRenameKeepsWorktree(t *testing.T) {
 		t.Errorf("restart used %s, want the old worktree %s", got, wt)
 	}
 }
+
+// Agents saved with the removed Claude API provider must survive a restart
+// and say plainly why they can't run, instead of vanishing or crashing.
+func TestLegacyClaudeAPIAgentIsKeptAndRefusesToStart(t *testing.T) {
+	e := newEnv(t, nil)
+	ca := store.Agent{FleetID: e.fleetID, Name: "old", Backend: LegacyClaudeAPI, Model: "claude-opus-5-5", Status: string(StatusIdle)}
+	if err := e.st.CreateAgent(&ca); err != nil {
+		t.Fatal(err)
+	}
+	sup, srv := startSup(t, e.st, e.be)
+	t.Cleanup(func() { srv.Close(); sup.Close() })
+	err := sup.Start(ca.ID, "go")
+	want := "Claude API was removed. Edit this agent to pick another provider."
+	if err == nil || err.Error() != want {
+		t.Errorf("Start error = %v, want %q", err, want)
+	}
+	if cfg, err := sup.AgentConfig(ca.ID); err != nil || cfg.Backend != LegacyClaudeAPI {
+		t.Errorf("got %+v, %v, want the agent kept with its backend", cfg, err)
+	}
+}

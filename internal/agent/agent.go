@@ -3,9 +3,9 @@
 // happens as a stream of Events.
 //
 // The fleet supervisor and the UI only ever see these types. Claude Code and
-// the raw Claude API are the v1 backends (packages claudecode and claudeapi);
-// another provider can be added later by implementing Backend, without the UI
-// changing. The interface stays internal until the v2 plugin API.
+// the chat providers OpenAI, Gemini and Local (Ollama) are the v1 backends
+// (packages claudecode and chat); another provider can be added later by
+// implementing Backend, without the UI changing. The interface stays internal until the v2 plugin API.
 package agent
 
 import (
@@ -18,7 +18,9 @@ import (
 // Never rename one: existing agents would lose their backend.
 const (
 	BackendClaudeCode = "claude-code"
-	BackendClaudeAPI  = "claude-api"
+	BackendOpenAI     = "openai"
+	BackendGemini     = "gemini"
+	BackendLocal      = "local"
 )
 
 // Backend starts sessions. Implementations must be safe for concurrent use;
@@ -39,7 +41,7 @@ type Spec struct {
 	WorkDir string // absolute; the agent's own directory or git worktree
 
 	// SystemPrompt is the agent's pinned prompt. Claude Code appends it to
-	// its own system prompt; the API backend sends it as the system prompt.
+	// its own system prompt; chat backends send it as the system prompt.
 	SystemPrompt string
 
 	// Prompt is the first user message. Empty starts the session idle,
@@ -143,8 +145,8 @@ type Event struct {
 
 	Usage Usage
 	// CostUSD is the cost of this turn only (on EventResult), or 0 if the
-	// backend does not know it. Claude Code reports it; the API backend
-	// leaves it 0 and the supervisor prices Usage itself.
+	// backend does not know it. Claude Code reports it; the chat backends
+	// leave it 0 and the supervisor prices Usage itself.
 	CostUSD  float64
 	Duration time.Duration
 	Turns    int

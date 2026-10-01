@@ -165,7 +165,7 @@ func storeErr(err error, fallback string) error {
 }
 
 func (s *Supervisor) knownBackend(name string) bool {
-	if name == agent.BackendClaudeCode || name == agent.BackendClaudeAPI {
+	if name == agent.BackendClaudeCode {
 		return true
 	}
 	_, ok := s.o.Backends[name]
@@ -181,6 +181,8 @@ func (s *Supervisor) validateAgent(c AgentConfig, selfID string) (AgentConfig, e
 		return c, errors.New("That fleet no longer exists.")
 	case c.Name == "":
 		return c, errors.New("An agent needs a name.")
+	case c.Backend == LegacyClaudeAPI:
+		return c, errors.New(claudeAPIRemoved)
 	case !s.knownBackend(c.Backend):
 		return c, fmt.Errorf("%q isn't a known backend.", c.Backend)
 	case c.Model == "":

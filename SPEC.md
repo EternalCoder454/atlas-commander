@@ -2,7 +2,7 @@
 
 ## What it is
 
-A **desktop GUI** for observing, managing, and orchestrating a **fleet of Claude agents** (Claude Code / Claude API). Think mission control: you're the **Commander**, and your agents are your crew.
+A **desktop GUI** for observing, managing, and orchestrating a **fleet of Claude agents** (Claude Code, OpenAI, Gemini or a local model). Think mission control: you're the **Commander**, and your agents are your crew.
 
 ## Target user
 
@@ -45,7 +45,7 @@ Draws from the **Atlas** family aesthetic:
 
 ### Agent backend interface
 - Internal Go interface: Start, Stop, Send, Event stream
-- v1 backends: Claude Code and the raw Claude API
+- v1 backends: Claude Code, and chat providers (OpenAI, Gemini, Local through Ollama)
 - Other model providers can be added later without UI changes
 
 ### Agent control
@@ -122,7 +122,7 @@ Draws from the **Atlas** family aesthetic:
 ## Agent registration form
 
 - Name
-- Backend (Claude Code or Claude API)
+- Backend (Claude Code, OpenAI, Gemini or Local)
 - Model
 - Fleet
 - Working directory

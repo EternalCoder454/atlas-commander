@@ -289,6 +289,8 @@ func (s *Supervisor) canStart(a *agentState) error {
 		return errors.New("This agent is archived.")
 	case a.status.Live() || a.sess != nil:
 		return errors.New("This agent is already running.")
+	case a.cfg.Backend == LegacyClaudeAPI:
+		return errors.New(claudeAPIRemoved)
 	case s.o.Backends[a.cfg.Backend] == nil:
 		return fmt.Errorf("The %s backend isn't available. Check the setup screen.", a.cfg.Backend)
 	case s.srv == nil:
@@ -302,7 +304,8 @@ func (s *Supervisor) canStart(a *agentState) error {
 		return errors.New("This fleet has reached its budget. Raise the budget to run its agents again.")
 	}
 	capSet := a.cfg.CostCapUSD > 0 || (f != nil && f.BudgetUSD > 0)
-	if _, ok := s.o.Prices.Lookup(a.cfg.Model); capSet && !ok {
+	// Local runs on this machine and costs nothing, so it never needs a price.
+	if _, ok := s.o.Prices.Lookup(a.cfg.Model); capSet && !ok && a.cfg.Backend != agent.BackendLocal {
 		return fmt.Errorf("No price is known for %s, so its cost cap can't be enforced. Add it to prices.json.", a.cfg.Model)
 	}
 	return nil

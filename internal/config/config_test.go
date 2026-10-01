@@ -28,8 +28,8 @@ func TestNormalizeFixesJunk(t *testing.T) {
 	if s.WindowWidth != MinWindowWidth || s.WindowHeight != MinWindowHeight {
 		t.Errorf("window: got %dx%d, want %dx%d", s.WindowWidth, s.WindowHeight, MinWindowWidth, MinWindowHeight)
 	}
-	if s.MonoFont != "JetBrains Mono" || s.APIKeyEnv != "ANTHROPIC_API_KEY" {
-		t.Errorf("empty strings: got %q %q, want defaults", s.MonoFont, s.APIKeyEnv)
+	if s.MonoFont != "JetBrains Mono" || s.OpenAIKeyEnv != "OPENAI_API_KEY" {
+		t.Errorf("empty strings: got %q %q, want defaults", s.MonoFont, s.OpenAIKeyEnv)
 	}
 	s.FontSize = 3
 	s.Normalize()
@@ -199,5 +199,24 @@ func TestEmptyPathUsesPathsPackage(t *testing.T) {
 	}
 	if _, err := Load(""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Settings from before the provider change still carry api_key_env; they must
+// load, and the new fields must fall back to their defaults.
+func TestLoadIgnoresOldAPIKeyFieldAndDefaultsProviders(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"api_key_env":"X","ollama_url":" localhost:11434/ "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.OpenAIKeyEnv != "OPENAI_API_KEY" || s.GeminiKeyEnv != "GEMINI_API_KEY" {
+		t.Errorf("got %q %q, want the default key variables", s.OpenAIKeyEnv, s.GeminiKeyEnv)
+	}
+	if s.OllamaURL != "http://localhost:11434" {
+		t.Errorf("got ollama url %q, want http://localhost:11434", s.OllamaURL)
 	}
 }
