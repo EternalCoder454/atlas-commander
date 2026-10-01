@@ -191,8 +191,8 @@ func TestWithOverrides(t *testing.T) {
 func TestQSSDeterministicAndUsesEveryColour(t *testing.T) {
 	for _, th := range Builtins() {
 		m := MetricsFor(Comfortable)
-		a := QSS(th, m, "Inter", "JetBrains Mono", 10)
-		if b := QSS(th, m, "Inter", "JetBrains Mono", 10); a != b {
+		a := QSS(th, m, "Inter", "JetBrains Mono", 10, Glass{})
+		if b := QSS(th, m, "Inter", "JetBrains Mono", 10, Glass{}); a != b {
 			t.Errorf("%s: output differs between calls", th.ID)
 		}
 		for _, k := range append(append([]string{}, BaseKeys...), DerivedKeys...) {

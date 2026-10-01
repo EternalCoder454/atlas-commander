@@ -44,20 +44,33 @@ var (
 	UpdateChannelChoices = []string{"release", "beta"}
 )
 
+// Window transparency levels, as Atlas Monitor has them. Off leaves the window
+// opaque, which is how Commander has always looked.
+const (
+	TransparencyOff    = "off"
+	TransparencySubtle = "subtle"
+	TransparencyMedium = "medium"
+	TransparencyStrong = "strong"
+)
+
+// TransparencyChoices are the levels Settings offers, weakest first.
+var TransparencyChoices = []string{TransparencyOff, TransparencySubtle, TransparencyMedium, TransparencyStrong}
+
 // Settings is everything the user can change.
 type Settings struct {
-	Theme            string `json:"theme"` // theme id; "" follows the system
-	ThemeMode        string `json:"theme_mode"`
-	Accent           string `json:"accent"` // "#rrggbb" override or ""
-	Density          string `json:"density"`
-	UIFont           string `json:"ui_font"` // "" = the system font
-	MonoFont         string `json:"mono_font"`
-	FontSize         int    `json:"font_size"` // points
-	SidebarCollapsed bool   `json:"sidebar_collapsed"`
-	WindowWidth      int    `json:"window_width"`
-	WindowHeight     int    `json:"window_height"`
-	ActiveView       string `json:"active_view"`
-	Notifications    bool   `json:"notifications"`
+	Theme     string `json:"theme"` // theme id; "" follows the system
+	ThemeMode string `json:"theme_mode"`
+	Accent    string `json:"accent"` // "#rrggbb" override or ""
+	Density   string `json:"density"`
+	UIFont    string `json:"ui_font"` // "" = the system font
+	MonoFont  string `json:"mono_font"`
+	FontSize  int    `json:"font_size"` // points
+	// Transparency is the window glass level: off, subtle, medium or strong.
+	Transparency  string `json:"transparency"`
+	WindowWidth   int    `json:"window_width"`
+	WindowHeight  int    `json:"window_height"`
+	ActiveView    string `json:"active_view"`
+	Notifications bool   `json:"notifications"`
 	// ShowIntro plays the Atlas mark and the app's name when the window
 	// opens. It is skipped anyway when the desktop has animations turned off.
 	ShowIntro     bool   `json:"show_intro"`
@@ -72,6 +85,7 @@ func Defaults() Settings {
 	return Settings{
 		ThemeMode:     ModeSystem,
 		Density:       "comfortable",
+		Transparency:  TransparencyOff,
 		MonoFont:      "JetBrains Mono",
 		FontSize:      10,
 		WindowWidth:   1440,
@@ -103,6 +117,11 @@ func NormalizeDensity(v string) string { return pick(v, DensityChoices, "comfort
 // NormalizeUpdateChannel maps junk to "release".
 func NormalizeUpdateChannel(v string) string { return pick(v, UpdateChannelChoices, "release") }
 
+// NormalizeTransparency maps anything but a known level to "off", so a
+// hand-edited value can never leave the window half see-through with no way
+// to see why.
+func NormalizeTransparency(v string) string { return pick(v, TransparencyChoices, TransparencyOff) }
+
 // NormalizeAccent keeps a lower-case #rrggbb and drops anything else, so a bad
 // value means "use the theme's accent" rather than a broken style sheet.
 func NormalizeAccent(v string) string {
@@ -133,6 +152,7 @@ func (s *Settings) Normalize() {
 	s.ThemeMode = NormalizeThemeMode(s.ThemeMode)
 	s.Accent = NormalizeAccent(s.Accent)
 	s.Density = NormalizeDensity(s.Density)
+	s.Transparency = NormalizeTransparency(s.Transparency)
 	s.UIFont = strings.TrimSpace(s.UIFont)
 	if s.MonoFont = strings.TrimSpace(s.MonoFont); s.MonoFont == "" {
 		s.MonoFont = d.MonoFont

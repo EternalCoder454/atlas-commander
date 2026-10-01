@@ -104,6 +104,7 @@ func newSettingsPage(a *App) *settingsPage {
 	p.themeCard()
 	p.accentCard()
 	p.densityCard()
+	p.transparencyCard()
 	p.introCard()
 
 	p.section("Text")
@@ -589,6 +590,24 @@ func (p *settingsPage) densityCard() {
 		p.retheme()
 	})
 	p.card().head("density", "Density", "How tall rows are. Compact fits more agents on the board.", density)
+}
+
+// transparencyCard sets how much the desktop shows through the window. Where
+// that cannot work the card stays, greyed, with the reason under its title.
+func (p *settingsPage) transparencyCard() {
+	s := p.settings()
+	labels := []string{"Off", "Subtle", "Medium", "Strong"}
+	idx := max(0, slices.Index(config.TransparencyChoices, s.Transparency))
+	seg := segmented(labels, idx, func(i int) {
+		s.Transparency = config.TransparencyChoices[i]
+		p.retheme()
+	})
+	sub := "Lets the desktop show through the window. Text and charts stay solid."
+	if ok, why := transparencyAvailable(); !ok {
+		sub = why
+		seg.SetEnabled(false)
+	}
+	p.card().head("opacity", "Window transparency", sub, seg)
 }
 
 func (p *settingsPage) introCard() {

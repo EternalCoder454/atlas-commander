@@ -32,6 +32,30 @@ func Palette(t Theme) map[string]string {
 	}
 }
 
+// Glass is how see-through the window's surfaces are, as opacities from 0 to
+// 1. It is Atlas Monitor's scheme: the frame (header and sidebar) is the
+// window's own surface, the page is a sheet laid on the frame so its opacity
+// compounds with the frame's, and cards on the page keep more colour still.
+// Text and charts are never given an alpha.
+type Glass struct {
+	On                bool
+	Frame, Page, Card float64
+}
+
+// GlassFor returns the opacities for a transparency level ("off", "subtle",
+// "medium", "strong"). Anything else is off, which paints everything solid.
+func GlassFor(level string) Glass {
+	switch level {
+	case "subtle":
+		return Glass{true, 0.90, 0.55, 0.85}
+	case "medium":
+		return Glass{true, 0.78, 0.45, 0.75}
+	case "strong":
+		return Glass{true, 0.62, 0.40, 0.65}
+	}
+	return Glass{false, 1, 1, 1}
+}
+
 // q quotes a font family for a style sheet.
 func q(family string) string {
 	return `"` + strings.NewReplacer(`"`, "", `\`, "", "\n", "").Replace(family) + `"`
@@ -46,7 +70,7 @@ func q(family string) string {
 // QFrame[card="true"] is a card; QLabel[status="ok|warn|error|idle"] colours
 // text by state, and QLabel[accenttext="true"] uses the accent text colour.
 // There are no shadows anywhere, matching the family's flat look.
-func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int) string {
+func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) string {
 	t = t.Filled()
 	c := func(k string) rgb { return mustHex(t.Colors[k]) }
 	h := func(k string) string { return t.Colors[k] }
@@ -70,7 +94,17 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int) string {
 		family = "font-family: " + q(uiFont) + ";"
 	}
 	w("QWidget { color: %s; %s font-size: %dpt; }\n", h("window_fg_color"), family, fontPt)
-	w("QMainWindow, QWidget#centralwidget { background-color: %s; }\n", h("window_bg_color"))
+	if g.On {
+		// The window is translucent: its own background goes, and the frame
+		// and page paint themselves at partial opacity (see Glass).
+		w("QMainWindow, QWidget#centralwidget { background-color: transparent; }\n")
+	} else {
+		w("QMainWindow, QWidget#centralwidget { background-color: %s; }\n", h("window_bg_color"))
+	}
+	cardBg := h("card_bg_color")
+	if g.On {
+		cardBg = c("card_bg_color").rgba(g.Card)
+	}
 	w("QWidget:disabled { color: %s; }\n", winFg.rgba(0.45))
 	if monoFont != "" {
 		w("*[mono=\"true\"], QPlainTextEdit[mono=\"true\"], QTextEdit[mono=\"true\"] { font-family: %s, monospace; }\n", q(monoFont))
@@ -87,7 +121,7 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int) string {
 
 	w("QToolBar { background-color: %s; color: %s; border: none; spacing: %dpx; }\n", h("headerbar_bg_color"), h("headerbar_fg_color"), pad/2)
 	w("QStatusBar { background-color: %s; color: %s; border: none; }\n", h("headerbar_bg_color"), h("headerbar_fg_color"))
-	w("QFrame[card=\"true\"] { background-color: %s; color: %s; border: %s; border-radius: %dpx; }\n", h("card_bg_color"), h("card_fg_color"), hair, r)
+	w("QFrame[card=\"true\"] { background-color: %s; color: %s; border: %s; border-radius: %dpx; }\n", cardBg, h("card_fg_color"), hair, r)
 	w("QFrame[card=\"true\"] QLabel { background: transparent; color: %s; }\n", h("card_fg_color"))
 	w("QLabel { background: transparent; }\n")
 	w("QLabel[accenttext=\"true\"], QFrame[card=\"true\"] QLabel[accenttext=\"true\"] { color: %s; }\n", h("accent_color"))
