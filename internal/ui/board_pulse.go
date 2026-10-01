@@ -77,9 +77,11 @@ func (b *boardPage) pulseTick(ps *pulseState) {
 	if want != ps.on {
 		ps.on = want
 		b.updateStatusColumn() // draw the first halo, or erase the last
+		b.updateCardDots(true)
 	}
 	if want {
 		b.updateStatusColumn()
+		b.updateCardDots(false)
 	}
 	if want != ps.fast {
 		ps.fast = want
@@ -91,12 +93,23 @@ func (b *boardPage) pulseTick(ps *pulseState) {
 	}
 }
 
-// pulseWanted is true when a halo would be seen.
+// pulseWanted is true when a halo would be seen, in the table or on a card.
 func (b *boardPage) pulseWanted() bool {
-	if !qtx.AnimationsEnabled() || !b.table.IsVisible() {
+	if !qtx.AnimationsEnabled() {
 		return false
 	}
 	if win := b.w.Window(); win == nil || win.IsMinimized() {
+		return false
+	}
+	if b.cardScroll != nil && b.cardScroll.IsVisible() {
+		for _, c := range b.cards {
+			if pulses(c.dotStatus) && cardDotVisible(c) {
+				return true
+			}
+		}
+		return false
+	}
+	if !b.table.IsVisible() {
 		return false
 	}
 	vh := b.table.Viewport().Height()
@@ -117,6 +130,30 @@ func (b *boardPage) pulseWanted() bool {
 func (b *boardPage) updateStatusColumn() {
 	vp := b.table.Viewport()
 	vp.Update2(b.table.ColumnViewportPosition(colStatus), 0, b.table.ColumnWidth(colStatus), vp.Height())
+}
+
+// updateCardDots repaints the dots of pulsing cards, or every dot when all
+// is set (halos just turned on or off).
+func (b *boardPage) updateCardDots(all bool) {
+	if b.cardScroll == nil || !b.cardScroll.IsVisible() {
+		return
+	}
+	for _, c := range b.cards {
+		if all || pulses(c.dotStatus) {
+			c.dot.Update()
+		}
+	}
+}
+
+// cardDotVisible reports whether a card's dot is inside the scroll area's
+// viewport, so a pulsing card scrolled out of view costs no frames.
+func cardDotVisible(c *agentCard) bool {
+	if !c.dot.IsVisible() {
+		return false
+	}
+	// MIQT frees the returned region with a finalizer; deleting it here too
+	// would free it twice.
+	return !c.dot.VisibleRegion().IsEmpty()
 }
 
 // paintHalo draws the ring for one status dot centred on (cx, cy), clipped to

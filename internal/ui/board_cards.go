@@ -10,6 +10,7 @@ import (
 
 	"atlas-commander/internal/config"
 	"atlas-commander/internal/fleet"
+	"atlas-commander/internal/ui/qtx"
 )
 
 // The Simple layout shows agents as cards instead of the table. Everything
@@ -21,6 +22,8 @@ const (
 	cardMaxCols  = 3
 	cardGap      = 12
 	cardPad      = 14 // left and right padding inside a card
+	cardDotBox   = 28 // room for the status dot and its widest halo
+	cardFadeMs   = 180
 )
 
 // Which buttons a card shows. The mode is derived from the agent's status and
@@ -39,6 +42,7 @@ type agentCard struct {
 	id string
 	f  *qt.QFrame
 
+	dot    *qt.QWidget // painted status dot, with the same halo as the table
 	status *qt.QLabel
 	name   *qt.QLabel
 	fleet  *qt.QLabel
@@ -50,6 +54,7 @@ type agentCard struct {
 
 	// What the card last showed, so unchanged values cost nothing.
 	tone       string
+	dotStatus  fleet.Status
 	statusText string
 	nameText   string
 	fleetText  string
@@ -116,8 +121,17 @@ func (b *boardPage) newCard(a *fleet.AgentView) *agentCard {
 
 	top := qt.NewQHBoxLayout2()
 	top.SetSpacing(8)
+	c.dot = qt.NewQWidget2()
+	c.dot.SetFixedSize2(cardDotBox, cardDotBox)
+	c.dot.OnPaintEvent(func(super func(*qt.QPaintEvent), ev *qt.QPaintEvent) { b.paintCardDot(c) })
+	// The dot's box is wide enough for the halo, which already leaves a gap,
+	// so the label sits right against it.
+	dotRow := qt.NewQHBoxLayout2()
+	dotRow.SetSpacing(0)
+	dotRow.AddWidget(c.dot)
 	c.status = qt.NewQLabel3("")
-	top.AddWidget(c.status.QWidget)
+	dotRow.AddWidget(c.status.QWidget)
+	top.AddLayout(dotRow.QLayout)
 	c.name = qt.NewQLabel3("")
 	c.name.SetTextFormat(qt.RichText)
 	c.name.SetSizePolicy2(qt.QSizePolicy__Ignored, qt.QSizePolicy__Preferred)
@@ -207,6 +221,11 @@ func (b *boardPage) refreshCards() {
 		c, ok := b.cards[a.ID]
 		if !ok {
 			c = b.newCard(a)
+			// A card that appears while the grid is on screen fades in, so
+			// a new agent is noticed; the first fill at startup does not.
+			if b.cardScroll.IsVisible() {
+				fadeInCard(c)
+			}
 		}
 		b.updateCard(c, a)
 	}
@@ -278,7 +297,6 @@ func (b *boardPage) fitCardText(c *agentCard, w int) {
 	}
 	task = strings.Join(strings.Fields(task), " ")
 	c.task.SetText(fm.ElidedText(task, qt.ElideRight, 2*w-w/6))
-	fm.Delete()
 	if lh != c.taskLineH {
 		c.taskLineH = lh
 		c.task.SetFixedHeight(2*lh + 2)
@@ -292,7 +310,6 @@ func (b *boardPage) fitCardText(c *agentCard, w int) {
 	tm := c.tool.FontMetrics()
 	cw := c.cost.SizeHint().Width()
 	c.tool.SetText(tm.ElidedText(c.toolRaw, qt.ElideRight, max(40, w-cw-8)))
-	tm.Delete()
 	c.tool.SetToolTip(c.toolRaw)
 }
 
@@ -307,7 +324,11 @@ func (b *boardPage) updateCard(c *agentCard, a *fleet.AgentView) {
 	case fleet.ToneError:
 		tone = "error"
 	}
-	if st := "● " + statusText(a.Status); st != c.statusText {
+	if a.Status != c.dotStatus {
+		c.dotStatus = a.Status
+		c.dot.Update()
+	}
+	if st := statusText(a.Status); st != c.statusText {
 		c.statusText = st
 		c.status.SetText(st)
 	}
@@ -390,4 +411,39 @@ func (b *boardPage) showRows() {
 	default:
 		b.views.SetCurrentWidget(b.table.QWidget)
 	}
+}
+
+// paintCardDot draws a card's status dot, and its halo while the board's
+// pulse timer has halos on.
+func (b *boardPage) paintCardDot(c *agentCard) {
+	pal := b.app.pal
+	if pal == nil {
+		return
+	}
+	p := qt.NewQPainter2(c.dot.QPaintDevice)
+	defer p.Delete()
+	defer p.End()
+	p.SetRenderHint(qt.QPainter__Antialiasing)
+	col := pal.toneColor(c.dotStatus.Tone())
+	mid := cardDotBox / 2.0
+	b.paintHalo(p, c.dotStatus, col, mid, mid, [4]int{0, 0, cardDotBox, cardDotBox})
+	dc := col.q(1)
+	defer dc.Delete()
+	br := qt.NewQBrush3(dc)
+	defer br.Delete()
+	p.SetPenWithStyle(qt.NoPen)
+	p.SetBrush(br)
+	p.DrawEllipse(rectf(mid-pulseDotR, mid-pulseDotR, 2*pulseDotR, 2*pulseDotR))
+}
+
+// fadeInCard fades a new card from transparent. The effect belongs to the
+// card, so a card removed mid-fade takes its animation with it.
+func fadeInCard(c *agentCard) {
+	if !qtx.AnimationsEnabled() {
+		return
+	}
+	eff := qt.NewQGraphicsOpacityEffect2(c.f.QObject)
+	eff.SetOpacity(0)
+	c.f.SetGraphicsEffect(eff.QGraphicsEffect)
+	animate(c.f.QObject, cardFadeMs, 0, 1, eff.SetOpacity, func() { c.f.SetGraphicsEffect(nil) })
 }
