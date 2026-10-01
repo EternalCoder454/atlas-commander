@@ -386,11 +386,12 @@ func (a *App) build() {
 	if v := os.Getenv("ATLAS_VIEW"); v != "" {
 		start = v
 	}
-	if _, ok := pageMakers[start]; !ok {
+	if _, ok := pageMakers[start]; !ok || !a.layoutShows(start) {
 		start = "board"
 	}
 	a.side.active = ""
 	a.side.select_(start)
+	a.applyLayout()
 
 	a.win.OnCloseEvent(func(super func(*qt.QCloseEvent), ev *qt.QCloseEvent) {
 		a.saveWindow()
@@ -456,7 +457,7 @@ func (a *App) navItems() []navItem {
 			return ""
 		}
 	}
-	return []navItem{
+	all := []navItem{
 		{id: "g-fleet", title: "Fleet", group: true},
 		{id: "board", title: "Board", tip: "See every agent at a glance and start, hold or stop them.", badge: count(func(s *fleet.Snapshot) int {
 			n := 0
@@ -483,6 +484,7 @@ func (a *App) navItems() []navItem {
 		{id: "audit", title: "Audit log", tip: "Read the permanent record of events and decisions."},
 		{id: "observed", title: "Observed", tip: "Watch Claude Code sessions started outside Commander."},
 	}
+	return a.layoutNav(all)
 }
 
 func (a *App) addPage(id string, p page) {

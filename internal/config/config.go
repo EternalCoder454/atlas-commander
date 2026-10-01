@@ -42,6 +42,14 @@ var (
 	ThemeModeChoices     = []string{ModeSystem, ModeLight, ModeDark}
 	DensityChoices       = []string{"comfortable", "compact"}
 	UpdateChannelChoices = []string{"release", "beta"}
+	LayoutChoices        = []string{LayoutSimple, LayoutAdvanced}
+)
+
+// Layouts. Simple shows agents as cards with only Board, Approvals and
+// Settings; Advanced is the full sidebar and table.
+const (
+	LayoutSimple   = "simple"
+	LayoutAdvanced = "advanced"
 )
 
 // Window transparency levels, as Atlas Monitor has them. Off leaves the window
@@ -62,9 +70,12 @@ type Settings struct {
 	ThemeMode string `json:"theme_mode"`
 	Accent    string `json:"accent"` // "#rrggbb" override or ""
 	Density   string `json:"density"`
-	UIFont    string `json:"ui_font"` // "" = the system font
-	MonoFont  string `json:"mono_font"`
-	FontSize  int    `json:"font_size"` // points
+	// Layout is "simple" (new installs) or "advanced". A settings file from
+	// before this key existed loads as advanced; see Load.
+	Layout   string `json:"layout"`
+	UIFont   string `json:"ui_font"` // "" = the system font
+	MonoFont string `json:"mono_font"`
+	FontSize int    `json:"font_size"` // points
 	// Transparency is the window glass level: off, subtle, medium or strong.
 	Transparency  string `json:"transparency"`
 	WindowWidth   int    `json:"window_width"`
@@ -102,6 +113,7 @@ func Defaults() Settings {
 	return Settings{
 		ThemeMode:     ModeSystem,
 		Density:       "comfortable",
+		Layout:        LayoutSimple,
 		Transparency:  TransparencyOff,
 		MonoFont:      "JetBrains Mono",
 		FontSize:      10,
@@ -134,6 +146,9 @@ func NormalizeThemeMode(v string) string { return pick(v, ThemeModeChoices, Mode
 
 // NormalizeDensity maps junk to "comfortable".
 func NormalizeDensity(v string) string { return pick(v, DensityChoices, "comfortable") }
+
+// NormalizeLayout maps junk to "simple".
+func NormalizeLayout(v string) string { return pick(v, LayoutChoices, LayoutSimple) }
 
 // NormalizeUpdateChannel maps junk to "release".
 func NormalizeUpdateChannel(v string) string { return pick(v, UpdateChannelChoices, "release") }
@@ -182,6 +197,7 @@ func (s *Settings) Normalize() {
 	s.ThemeMode = NormalizeThemeMode(s.ThemeMode)
 	s.Accent = NormalizeAccent(s.Accent)
 	s.Density = NormalizeDensity(s.Density)
+	s.Layout = NormalizeLayout(s.Layout)
 	s.Transparency = NormalizeTransparency(s.Transparency)
 	s.UIFont = strings.TrimSpace(s.UIFont)
 	if s.MonoFont = strings.TrimSpace(s.MonoFont); s.MonoFont == "" {
@@ -259,6 +275,14 @@ func Load(path string) (Settings, error) {
 		}
 		// One wrongly typed field: Unmarshal has filled in every other
 		// field, so keep them and let Normalize repair the one it skipped.
+	}
+	// Someone who set Commander up before layouts existed keeps the full
+	// interface they know; only fresh installs start in Simple.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(data, &keys) == nil {
+		if _, ok := keys["layout"]; !ok {
+			s.Layout = LayoutAdvanced
+		}
 	}
 	s.Normalize()
 	return s, nil

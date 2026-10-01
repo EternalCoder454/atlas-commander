@@ -31,6 +31,7 @@ type startGuide struct {
 	W     *qt.QWidget
 	app   *App
 	steps [3]guideStep
+	note  *qt.QLabel // shown in the Simple layout only
 }
 
 func newStartGuide(a *App) *startGuide {
@@ -86,6 +87,11 @@ func newStartGuide(a *App) *startGuide {
 		row.AddWidget3(st.btn.QWidget, 0, qt.AlignVCenter)
 		cl.AddLayout(row.QLayout)
 	}
+	g.note = caption("This is the simple layout. Switch to Advanced in Settings when you want tasks, fleets and analytics.")
+	g.note.SetWordWrap(true)
+	cl.AddWidget(g.note.QWidget)
+	cl.AddSpacing(8)
+	g.setSimple(a.simpleLayout())
 	g.steps[0].btn.OnClicked(func() { a.side.select_("settings") })
 	// editFleet only needs the app when creating, so a bare page value runs
 	// the Fleets page's own dialog instead of a second copy of it.
@@ -104,6 +110,9 @@ func newStartGuide(a *App) *startGuide {
 	}
 	return g
 }
+
+// setSimple shows the note about the simple layout only while it is on.
+func (g *startGuide) setSimple(simple bool) { g.note.SetVisible(simple) }
 
 func (g *startGuide) set(i int, done bool) {
 	st := &g.steps[i]
