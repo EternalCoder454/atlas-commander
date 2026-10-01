@@ -102,7 +102,7 @@ sent anywhere except the requests the agents themselves make to Claude.
 
 ## Build from source
 
-You need Go 1.26 or newer, a C++ compiler, `pkg-config`, `git`, `make` and the
+You need Go 1.26 or newer, a C++ compiler, `pkg-config`, `git`, `make` or `just`, and the
 Qt 6.5+ development files (`setup.sh` installs these for you):
 
 ```sh
@@ -115,6 +115,9 @@ sudo pacman -S --needed go qt6-base qt6-svg base-devel git pkgconf              
 make build      # bin/atlas-commander and bin/atlas-hook
 make install    # into ~/.local; PREFIX=/usr for a package
 ```
+
+[`just`](https://github.com/casey/just) works too, with the same recipes:
+`just build`, `just install`, `just PREFIX=/usr install`, `just test`.
 
 The first build compiles the MIQT bindings and takes several minutes; later
 builds are cached. On Windows, in an [MSYS2](https://www.msys2.org/) UCRT64 shell:
@@ -129,7 +132,7 @@ does: both call the same script.
 
 ## Development
 
-- `make vet` and `make test` mirror CI. `make test` points the config, data and
+- `make vet` and `make test` (or `just vet`, `just test`) mirror CI. `make test` points the config, data and
   runtime directories at a temp folder and unsets the display, so GUI tests skip.
 - Windows compile check for the packages with no Qt:
   `GOOS=windows go vet ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./cmd/atlas-hook`

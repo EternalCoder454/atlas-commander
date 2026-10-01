@@ -130,7 +130,7 @@ detect_pm() {
 # What a build is missing, one short reason per line; empty when nothing.
 missing_native() {
 	have git || echo "git"
-	have make || echo "make"
+	{ have make || have just; } || echo "make (or just)"
 	{ have g++ || have c++ || have clang++; } || echo "a C++ compiler"
 	{ have pkg-config || have pkgconf; } || echo "pkg-config"
 	if have go; then
@@ -155,7 +155,7 @@ too_old() {
 }
 
 install_packages() {
-	[ -n "$pm" ] || die "no package manager this script knows. Install Go $NEED_GO+, a C++ compiler, pkg-config, git, make and the Qt $NEED_QT+ development files, then run this again."
+	[ -n "$pm" ] || die "no package manager this script knows. Install Go $NEED_GO+, a C++ compiler, pkg-config, git, make (or just) and the Qt $NEED_QT+ development files, then run this again."
 	say "Installing what the build needs with $pm:"
 	note "${install_cmd[*]} $packages"
 	ask "Go ahead?" || die "nothing installed"
@@ -208,7 +208,13 @@ build_and_install() {
 	fi
 	fetch_source "$want"
 	say "Building Atlas Commander (the first build compiles the Qt bindings and takes a few minutes)"
-	make -C "$SRC" install PREFIX="$PREFIX"
+	# Either front door works; the Makefile and the justfile hold the same
+	# recipes. just is used when it is there and make is not.
+	if have make; then
+		make -C "$SRC" install PREFIX="$PREFIX"
+	else
+		just --justfile "$SRC/justfile" --working-directory "$SRC" PREFIX="$PREFIX" install
+	fi
 }
 
 fetch_self() {
