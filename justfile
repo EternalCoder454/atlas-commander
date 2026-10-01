@@ -15,6 +15,9 @@ appdir := PREFIX / "share/applications"
 icondir := PREFIX / "share/icons/hicolor/scalable/apps"
 smallicondir := PREFIX / "share/icons/hicolor/16x16/apps"
 symbolicdir := PREFIX / "share/icons/hicolor/symbolic/apps"
+# Where the app finds the checkout it was built from, so the in-app updater
+# knows what to pull and rebuild. The same place the Makefile writes.
+datadir := env_var_or_default("XDG_DATA_HOME", home_directory() / ".local/share") / "atlas-commander"
 
 # Both programs go into bin/ together. atlas-commander registers atlas-hook as
 # Claude Code's PreToolUse hook and looks for it beside its own executable, so
@@ -55,6 +58,8 @@ test-race:
 install: build
     install -Dm755 {{bindir}}/{{binary}} "{{PREFIX}}/bin/{{binary}}"
     install -Dm755 {{bindir}}/{{hook}} "{{PREFIX}}/bin/{{hook}}"
+    install -d "{{datadir}}"
+    printf '%s\n' "{{justfile_directory()}}" > "{{datadir}}/source"
     install -Dm644 assets/icon.svg "{{icondir}}/{{appid}}.svg"
     install -Dm644 assets/icon-16.svg "{{smallicondir}}/{{appid}}.svg"
     install -Dm644 assets/icon-symbolic.svg "{{symbolicdir}}/{{appid}}-symbolic.svg"

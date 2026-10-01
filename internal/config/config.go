@@ -75,6 +75,7 @@ type Settings struct {
 	// opens. It is skipped anyway when the desktop has animations turned off.
 	ShowIntro     bool   `json:"show_intro"`
 	UpdateChannel string `json:"update_channel"`
+	UpdateCheck   bool   `json:"update_check"`
 	ClaudePath    string `json:"claude_path"` // "" = look on PATH
 	APIKeyEnv     string `json:"api_key_env"` // env var holding the API key
 	DefaultFleet  string `json:"default_fleet"`
@@ -93,6 +94,7 @@ func Defaults() Settings {
 		Notifications: true,
 		ShowIntro:     true,
 		UpdateChannel: "release",
+		UpdateCheck:   true,
 		APIKeyEnv:     "ANTHROPIC_API_KEY",
 	}
 }
