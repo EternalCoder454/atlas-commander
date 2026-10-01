@@ -5,9 +5,9 @@ name: CI
 on:
   push:
     branches: [release, beta]
-    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**, android/**]
   pull_request:
-    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**, android/**]
   workflow_dispatch:
 
 permissions:

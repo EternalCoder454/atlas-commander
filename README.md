@@ -123,7 +123,8 @@ request carries a secret token. "Forget paired phones" makes a new token.
 If your phone can't connect, your firewall may be blocking the port (47821 unless
 you changed it). On Fedora:
 `sudo firewall-cmd --add-port=47821/tcp --permanent && sudo firewall-cmd --reload`.
-The protocol is written down in [docs/phone-api.md](docs/phone-api.md).
+The protocol is written down in [docs/phone-api.md](docs/phone-api.md). The
+Android app's source and how to build it are in [android/](android/README.md).
 
 ## How approvals work
 

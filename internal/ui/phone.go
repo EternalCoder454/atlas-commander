@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -119,9 +120,10 @@ func (p *settingsPage) phoneSection() {
 	rl.SetSpacing(10)
 	pc.qr = qt.NewQLabel2()
 	rl.AddWidget3(pc.qr.QWidget, 0, qt.AlignLeft)
+	// Not selectable: the shown text carries break points that a hand-copied
+	// link would take along. Copy link gives the exact text.
 	pc.link = wrapCaption("")
 	setProp(pc.link.QWidget, "mono", true)
-	pc.link.SetTextInteractionFlags(qt.TextSelectableByMouse)
 	rl.AddWidget(pc.link.QWidget)
 	pc.copy = qt.NewQPushButton3("Copy link")
 	pc.copy.OnClicked(func() {
@@ -205,7 +207,7 @@ func (p *settingsPage) phoneRefresh() {
 		pc.show.SetText("Hide pairing code")
 		if link := phone.PairingLink(); link != pc.shownLink {
 			pc.shownLink = link
-			pc.link.SetText(link)
+			pc.link.SetText(breakable(link))
 			drawQR(pc.qr, link)
 		}
 	} else {
@@ -271,4 +273,21 @@ func drawQR(l *qt.QLabel, text string) {
 	pm := qt.QPixmap_FromImage(img)
 	l.SetPixmap(pm)
 	l.SetFixedSize2(n*module, n*module)
+}
+
+// breakable puts a zero-width space every few characters so a word-wrapped
+// label can break the pairing link, which has no spaces. Without them the
+// label is as wide as the whole link and pushes the Settings page past the
+// window's right edge.
+func breakable(s string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		if n > 0 && n%8 == 0 {
+			b.WriteRune('\u200b')
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return b.String()
 }
