@@ -28,6 +28,11 @@ type updateUI struct {
 
 	checking bool
 	checked  bool
+	// gen counts channel changes and tags each check with the one it started
+	// under; inflight is the tag of the check now running. A check answers for
+	// the channel it was asked about, so a result from an older gen is dropped
+	// and the check is run again for the current channel.
+	gen, inflight uint64
 	res      updateCheck
 
 	pill   *qt.QPushButton
@@ -55,21 +60,28 @@ func (u *updateUI) startCheck() {
 	}
 	channel := u.app.settings.UpdateChannel
 	local := strings.TrimSpace(u.app.version)
-	if u.load.start(1, func() (updateCheck, error) {
+	if u.load.start(u.gen, func() (updateCheck, error) {
 		in := update.Detect()
 		info, err := update.Check(in, channel, local)
 		return updateCheck{info: info, err: err, in: in}, nil
 	}) {
-		u.checking = true
+		u.checking, u.inflight = true, u.gen
 		u.redraw()
 	}
 }
 
 // poll is called from the tick: it takes a finished check, if there is one.
 func (u *updateUI) poll() {
-	if res, _, ok := u.load.take(1); ok {
+	if res, _, ok := u.load.take(u.gen); ok {
 		u.checking = false
 		u.deliver(res)
+		return
+	}
+	// The channel changed while a check ran: take dropped its answer, which
+	// described the old channel. Ask again for the new one.
+	if u.checking && u.inflight != u.gen && !u.load.running() {
+		u.checking = false
+		u.startCheck()
 	}
 }
 
@@ -81,6 +93,7 @@ func (u *updateUI) deliver(res updateCheck) {
 // forget drops the last answer, after the channel changed and it no longer
 // describes what the user chose.
 func (u *updateUI) forget() {
+	u.gen++
 	u.checked = false
 	u.res = updateCheck{}
 	u.redraw()

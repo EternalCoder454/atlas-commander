@@ -16,7 +16,9 @@ icondir := PREFIX / "share/icons/hicolor/scalable/apps"
 smallicondir := PREFIX / "share/icons/hicolor/16x16/apps"
 symbolicdir := PREFIX / "share/icons/hicolor/symbolic/apps"
 # Where the app finds the checkout it was built from, so the in-app updater
-# knows what to pull and rebuild. The same place the Makefile writes.
+# knows what to pull and rebuild. The same place and format the Makefile writes
+# (source, installed binary, built commit); skipped for a staged DESTDIR install.
+destdir := env_var_or_default("DESTDIR", "")
 datadir := env_var_or_default("XDG_DATA_HOME", home_directory() / ".local/share") / "atlas-commander"
 
 # Both programs go into bin/ together. atlas-commander registers atlas-hook as
@@ -58,8 +60,7 @@ test-race:
 install: build
     install -Dm755 {{bindir}}/{{binary}} "{{PREFIX}}/bin/{{binary}}"
     install -Dm755 {{bindir}}/{{hook}} "{{PREFIX}}/bin/{{hook}}"
-    install -d "{{datadir}}"
-    printf '%s\n' "{{justfile_directory()}}" > "{{datadir}}/source"
+    -@[ -n "{{destdir}}" ] || { install -d "{{datadir}}" && { printf 'source=%s\n' "{{justfile_directory()}}"; printf 'binary=%s\n' "{{PREFIX}}/bin/{{binary}}"; printf 'commit=%s\n' "$(git -C "{{justfile_directory()}}" rev-parse HEAD 2>/dev/null)"; } > "{{datadir}}/source"; } || true
     install -Dm644 assets/icon.svg "{{icondir}}/{{appid}}.svg"
     install -Dm644 assets/icon-16.svg "{{smallicondir}}/{{appid}}.svg"
     install -Dm644 assets/icon-symbolic.svg "{{symbolicdir}}/{{appid}}-symbolic.svg"
@@ -75,6 +76,7 @@ install: build
 uninstall:
     rm -f "{{PREFIX}}/bin/{{binary}}" "{{PREFIX}}/bin/{{hook}}"
     rm -f "{{appdir}}/{{appid}}.desktop"
+    rm -f "{{datadir}}/source"
     rm -f "{{icondir}}/{{appid}}.svg" "{{smallicondir}}/{{appid}}.svg" "{{symbolicdir}}/{{appid}}-symbolic.svg"
     -update-desktop-database "{{appdir}}" 2>/dev/null || true
 

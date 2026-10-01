@@ -70,9 +70,42 @@ type backend struct {
 // New returns the backend for one provider.
 func New(o Options) agent.Backend {
 	o.BaseURL = strings.TrimRight(o.BaseURL, "/")
-	// No overall timeout: a streamed reply can legitimately take minutes.
-	// The session context bounds the request instead.
-	return &backend{o: o, client: &http.Client{}}
+	// No overall timeout: a streamed reply can legitimately take minutes. What
+	// is bounded is the wait for the first answer (below) and silence in the
+	// middle of a stream (stallTimeout); the session context bounds the rest.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = headerTimeout
+	if o.Name == agent.BackendLocal {
+		// Ollama sends nothing until the model is loaded, which can take a while.
+		tr.ResponseHeaderTimeout = localHeaderTimeout
+	}
+	return &backend{o: o, client: &http.Client{Transport: tr}}
+}
+
+// headerTimeout is how long a hosted provider may take to start answering;
+// localHeaderTimeout is the same for Ollama, which may be loading a model.
+const (
+	headerTimeout      = 60 * time.Second
+	localHeaderTimeout = 120 * time.Second
+)
+
+// stallTimeout is how long a reply may go without a single byte before the
+// request is cancelled. A variable so tests need not wait the full time.
+var stallTimeout = 120 * time.Second
+
+// stallReader pushes the stall timer back on every read, so only silence, not
+// a long reply, trips it.
+type stallReader struct {
+	r io.Reader
+	t *time.Timer
+}
+
+func (s stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if n > 0 {
+		s.t.Reset(stallTimeout)
+	}
+	return n, err
 }
 
 func (b *backend) Name() string { return b.o.Name }
@@ -238,6 +271,7 @@ type streamChunk struct {
 		Delta struct {
 			Content string `json:"content"`
 		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
 		PromptTokens        int64 `json:"prompt_tokens"`
@@ -264,7 +298,14 @@ func (s *session) turn(batch []string) {
 		"stream":         true,
 		"stream_options": map[string]any{"include_usage": true},
 	})
-	req, err := http.NewRequestWithContext(s.ctx, http.MethodPost, s.b.o.BaseURL+"/chat/completions", bytes.NewReader(body))
+	// The request has its own context so a stalled stream can be cancelled
+	// without looking like the user stopped the session (s.ctx).
+	rctx, cancelReq := context.WithCancel(s.ctx)
+	defer cancelReq()
+	stall := time.AfterFunc(time.Hour, cancelReq)
+	stall.Stop() // armed once the headers are in; the transport bounds the wait before
+	defer stall.Stop()
+	req, err := http.NewRequestWithContext(rctx, http.MethodPost, s.b.o.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		s.fail(start, "The address for "+name+" isn't valid.")
 		return
@@ -290,8 +331,12 @@ func (s *session) turn(batch []string) {
 
 	var text strings.Builder
 	var usage agent.Usage
-	sc := bufio.NewScanner(resp.Body)
+	stall.Reset(stallTimeout)
+	sc := bufio.NewScanner(stallReader{r: resp.Body, t: stall})
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
+	// A stream that just stops is a dropped connection, not a finished reply:
+	// it counts as complete only with [DONE] or a finish_reason.
+	var done, sawData bool
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		data, ok := strings.CutPrefix(line, "data:")
@@ -299,7 +344,9 @@ func (s *session) turn(batch []string) {
 			continue // comments, event names, blank separators
 		}
 		data = strings.TrimSpace(data)
+		sawData = true
 		if data == "[DONE]" {
+			done = true
 			break
 		}
 		var ch streamChunk
@@ -312,6 +359,9 @@ func (s *session) turn(batch []string) {
 		}
 		for _, c := range ch.Choices {
 			text.WriteString(c.Delta.Content)
+			if c.FinishReason != nil && *c.FinishReason != "" {
+				done = true
+			}
 		}
 		if u := ch.Usage; u != nil {
 			usage = agent.Usage{Input: u.PromptTokens, Output: u.CompletionTokens}
@@ -331,6 +381,14 @@ func (s *session) turn(batch []string) {
 		return
 	}
 	if s.ctx.Err() != nil {
+		return
+	}
+	if !sawData {
+		s.fail(start, name+" sent an empty reply.")
+		return
+	}
+	if !done {
+		s.fail(start, "The reply from "+name+" was cut off.")
 		return
 	}
 

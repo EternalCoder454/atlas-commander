@@ -181,7 +181,9 @@ func (s *Settings) Normalize() {
 }
 
 // NormalizeOllamaURL trims the address, adds http:// when no scheme was typed
-// and drops trailing slashes; an empty or unusable value gives the default.
+// and drops trailing slashes and a trailing /v1 (the backend adds that path
+// itself, so keeping it would ask for /v1/v1/...); the scheme is matched
+// without regard to case. An empty or unusable value gives the default.
 func NormalizeOllamaURL(v string) string {
 	v = strings.TrimRight(strings.TrimSpace(v), "/")
 	if v == "" {
@@ -190,8 +192,17 @@ func NormalizeOllamaURL(v string) string {
 	if !strings.Contains(v, "://") {
 		v = "http://" + v
 	}
-	if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+	lower := strings.ToLower(v)
+	switch {
+	case strings.HasPrefix(lower, "http://"):
+		v = "http://" + v[len("http://"):]
+	case strings.HasPrefix(lower, "https://"):
+		v = "https://" + v[len("https://"):]
+	default:
 		return Defaults().OllamaURL
+	}
+	if strings.HasSuffix(strings.ToLower(v), "/v1") {
+		v = strings.TrimRight(v[:len(v)-len("/v1")], "/")
 	}
 	return v
 }

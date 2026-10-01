@@ -9,6 +9,10 @@ SMALLICONDIR := $(PREFIX)/share/icons/hicolor/16x16/apps
 SYMBOLICDIR := $(PREFIX)/share/icons/hicolor/symbolic/apps
 # Where the app finds the checkout it was built from (internal/update reads it
 # through paths.Data), so the in-app updater knows what to pull and rebuild.
+# The record also names the installed binary, so a distro package that shares
+# the prefix is not mistaken for this build, and the commit that was built, so a
+# pull followed by a failed build is not reported as up to date. Writing it is
+# best effort and skipped for a staged (DESTDIR) install.
 DATADIR := $(or $(XDG_DATA_HOME),$(HOME)/.local/share)/atlas-commander
 
 .PHONY: build run install uninstall clean vet test test-race
@@ -46,8 +50,7 @@ test-race:
 install: build
 	install -Dm755 $(BINDIR)/$(BINARY) $(PREFIX)/bin/$(BINARY)
 	install -Dm755 $(BINDIR)/$(HOOK) $(PREFIX)/bin/$(HOOK)
-	install -d "$(DATADIR)"
-	printf '%s\n' "$(CURDIR)" > "$(DATADIR)/source"
+	-@[ -n "$(DESTDIR)" ] || { install -d "$(DATADIR)" && { printf 'source=%s\n' "$(CURDIR)"; printf 'binary=%s\n' "$(PREFIX)/bin/$(BINARY)"; printf 'commit=%s\n' "$$(git -C "$(CURDIR)" rev-parse HEAD 2>/dev/null)"; } > "$(DATADIR)/source"; } || true
 	install -Dm644 assets/icon.svg $(ICONDIR)/$(APPID).svg
 	install -Dm644 assets/icon-16.svg $(SMALLICONDIR)/$(APPID).svg
 	install -Dm644 assets/icon-symbolic.svg $(SYMBOLICDIR)/$(APPID)-symbolic.svg
@@ -63,6 +66,7 @@ install: build
 uninstall:
 	rm -f $(PREFIX)/bin/$(BINARY) $(PREFIX)/bin/$(HOOK)
 	rm -f $(APPDIR)/$(APPID).desktop
+	rm -f "$(DATADIR)/source"
 	rm -f $(ICONDIR)/$(APPID).svg $(SMALLICONDIR)/$(APPID).svg $(SYMBOLICDIR)/$(APPID)-symbolic.svg
 	-update-desktop-database $(APPDIR) 2>/dev/null || true
 
