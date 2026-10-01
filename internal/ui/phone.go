@@ -169,7 +169,6 @@ func drawQR(l *qt.QLabel, text string) {
 	const module, quiet = 5, 4
 	n := code.Size + 2*quiet
 	img := qt.NewQImage3(n*module, n*module, qt.QImage__Format_RGB32)
-	defer img.Delete()
 	img.Fill(0xffffffff)
 	for y := range code.Size {
 		for x := range code.Size {
@@ -184,7 +183,6 @@ func drawQR(l *qt.QLabel, text string) {
 		}
 	}
 	pm := qt.QPixmap_FromImage(img)
-	defer pm.Delete()
 	l.SetPixmap(pm)
 	l.SetFixedSize2(n*module, n*module)
 }
