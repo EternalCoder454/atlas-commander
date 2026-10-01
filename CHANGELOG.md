@@ -13,6 +13,11 @@ it. One short line per change, no jargon — this is what the update prompt show
 - The Dispatch to… button shows a proper arrow
 - Kill all no longer keeps a focus outline after you click it
 - Settings no longer runs off the right edge when Commander keeps its files in a long folder path
+- When Commander finds an update as it opens, it tells you once with what's new, and you can update now or later
+- A Linux release download installed with install.sh can now update itself (the first update downloads and builds the source)
+- If an update needs tools you don't have, Commander names them and the command that installs them
+- For a copy installed by your package manager, the update window can run the update command in a terminal
+- Settings, About shows how your copy was installed and so who updates it
 
 ## 0.1.0
 

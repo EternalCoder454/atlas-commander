@@ -33,3 +33,12 @@ func PlatformWording() (heading, body string, ok bool) {
 func Relaunch(string) error {
 	return errors.New("restarting after an update is not supported on Windows")
 }
+
+// FindTerminal is nil: no package manager owns a Windows install, so there is
+// no update command to run.
+func FindTerminal() *Terminal { return nil }
+
+// Run is never reached; see FindTerminal.
+func (t Terminal) Run(string) error {
+	return errors.New("running an update command is not supported on Windows")
+}
