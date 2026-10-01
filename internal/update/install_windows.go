@@ -30,4 +30,6 @@ func PlatformWording() (heading, body string, ok bool) {
 
 // Relaunch is never reached, since nothing here installs an update. It exists so
 // the package has the same functions on both platforms.
-func Relaunch(string) error { return errors.New("restarting after an update is not supported on Windows") }
+func Relaunch(string) error {
+	return errors.New("restarting after an update is not supported on Windows")
+}

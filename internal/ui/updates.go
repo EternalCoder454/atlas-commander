@@ -33,7 +33,7 @@ type updateUI struct {
 	// the channel it was asked about, so a result from an older gen is dropped
 	// and the check is run again for the current channel.
 	gen, inflight uint64
-	res      updateCheck
+	res           updateCheck
 
 	pill   *qt.QPushButton
 	render []func() // redraw what shows the result, e.g. Settings' Updates card
