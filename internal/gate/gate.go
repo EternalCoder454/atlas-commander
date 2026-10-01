@@ -68,6 +68,9 @@ type Request struct {
 	ToolUseID string          `json:"tool_use_id"`
 	Cwd       string          `json:"cwd"`
 	Input     json.RawMessage `json:"input,omitempty"`
+	// Token is the session token the request came with, set by the server
+	// (never sent): a decider uses it to tell one session from the next.
+	Token string `json:"-"`
 }
 
 // Decision is the answer to a Request.

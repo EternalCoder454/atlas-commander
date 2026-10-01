@@ -229,8 +229,16 @@ func toolUse(tool, input string) agent.Event {
 	return agent.Event{Kind: agent.EventToolUse, Tool: tool, ToolInput: json.RawMessage(input), ToolUseID: "tu1"}
 }
 
-func gateReq(agentID, tool string) gate.Request {
-	return gate.Request{AgentID: agentID, Tool: tool, Input: json.RawMessage(`{"command":"ls"}`)}
+// gateReq is a hook request as the gate server hands it over: carrying the
+// token of the agent's live session, which Gate checks after a hold.
+func (e *env) gateReq(agentID, tool string) gate.Request {
+	e.sup.mu.Lock()
+	var token string
+	if a := e.sup.agents[agentID]; a != nil {
+		token = a.token
+	}
+	e.sup.mu.Unlock()
+	return gate.Request{AgentID: agentID, Tool: tool, Input: json.RawMessage(`{"command":"ls"}`), Token: token}
 }
 
 // The whole point of the snapshot: events from a session show up as status,
@@ -317,7 +325,7 @@ func TestCostCapStopsSessionAndGateDenies(t *testing.T) {
 	v := e.waitStatus(e.agentID, StatusCapped)
 	waitFor(t, "stop", func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.stops == 1 })
 	waitFor(t, "exit", func() bool { return e.view(e.agentID).Status == StatusCapped && !e.sessionLive() })
-	d := e.sup.Gate(context.Background(), gateReq(e.agentID, "Read"))
+	d := e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Read"))
 	if d.Allow || d.Reason != "This agent's cost cap has been reached." {
 		t.Errorf("gate = %+v, want denial for the cap", d)
 	}
@@ -354,7 +362,7 @@ func TestFleetBudgetStopsEveryLiveAgent(t *testing.T) {
 	sa.emit(agent.Event{Kind: agent.EventResult, CostUSD: 0.60})
 	e.waitStatus(e.agentID, StatusCapped)
 	e.waitStatus(b, StatusCapped)
-	if d := e.sup.Gate(context.Background(), gateReq(b, "Read")); d.Allow {
+	if d := e.sup.Gate(context.Background(), e.gateReq(b, "Read")); d.Allow {
 		t.Errorf("gate allowed a tool for an agent in an exhausted fleet: %+v", d)
 	}
 	if err := e.sup.Start(b, "again"); err == nil {
@@ -388,7 +396,7 @@ func TestHoldBlocksGateUntilResume(t *testing.T) {
 	}
 	e.waitStatus(e.agentID, StatusHeld)
 	got := make(chan gate.Decision, 1)
-	go func() { got <- e.sup.Gate(context.Background(), gateReq(e.agentID, "Read")) }()
+	go func() { got <- e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Read")) }()
 	select {
 	case d := <-got:
 		t.Fatalf("Gate returned %+v while held", d)
@@ -419,7 +427,7 @@ func TestStopReleasesHeldGate(t *testing.T) {
 	e.waitStatus(e.agentID, StatusRunning)
 	_ = e.sup.Hold(e.agentID)
 	got := make(chan gate.Decision, 1)
-	go func() { got <- e.sup.Gate(context.Background(), gateReq(e.agentID, "Read")) }()
+	go func() { got <- e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Read")) }()
 	time.Sleep(100 * time.Millisecond)
 	if err := e.sup.Stop(e.agentID); err != nil {
 		t.Fatal(err)
@@ -433,6 +441,34 @@ func TestStopReleasesHeldGate(t *testing.T) {
 		t.Fatal("Gate still blocked after Stop")
 	}
 	e.waitStatus(e.agentID, StatusStopped)
+}
+
+// A request held while its session ends must not run when the hold lifts:
+// the process it was for is gone. On a slow machine a Stop's exit is handled
+// before the waiter wakes, which is this case too.
+func TestHeldGateDeniedWhenSessionEnds(t *testing.T) {
+	e := newEnv(t, nil)
+	if err := e.sup.Start(e.agentID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	s := e.be.session(t, 0)
+	s.emit(initEv())
+	e.waitStatus(e.agentID, StatusRunning)
+	_ = e.sup.Hold(e.agentID)
+	got := make(chan gate.Decision, 1)
+	go func() { got <- e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Read")) }()
+	time.Sleep(100 * time.Millisecond)
+	s.finish(false, "done")
+	time.Sleep(100 * time.Millisecond)
+	_ = e.sup.Resume(e.agentID) // in case the exit kept the hold
+	select {
+	case d := <-got:
+		if d.Allow {
+			t.Errorf("gate = %+v after the session ended, want deny", d)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Gate still blocked after the session ended")
+	}
 }
 
 func approvalAgent(_ *FleetConfig, a *AgentConfig) { a.Approve = []string{"Bash"} }
@@ -463,7 +499,7 @@ func TestApprovalAllow(t *testing.T) {
 	e.be.session(t, 0).emit(initEv())
 	e.waitStatus(e.agentID, StatusRunning)
 	got := make(chan gate.Decision, 1)
-	go func() { got <- e.sup.Gate(context.Background(), gateReq(e.agentID, "Bash")) }()
+	go func() { got <- e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Bash")) }()
 	ap := waitApproval(e)
 	if ap.Summary != "ls" || ap.Tool != "Bash" || ap.AgentName != "alpha" {
 		t.Errorf("approval = %+v, want Bash/ls for alpha", ap)
@@ -495,7 +531,7 @@ func TestApprovalAllow(t *testing.T) {
 func TestApprovalDeny(t *testing.T) {
 	e := newEnv(t, approvalAgent)
 	got := make(chan gate.Decision, 1)
-	go func() { got <- e.sup.Gate(context.Background(), gateReq(e.agentID, "Bash")) }()
+	go func() { got <- e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Bash")) }()
 	ap := waitApproval(e)
 	if err := e.sup.Decide(ap.ID, false, ""); err != nil {
 		t.Fatal(err)
@@ -505,10 +541,10 @@ func TestApprovalDeny(t *testing.T) {
 		t.Errorf("gate = %+v, want denial with the default reason", d)
 	}
 	// A tool outside the list needs no approval.
-	if d := e.sup.Gate(context.Background(), gateReq(e.agentID, "Read")); !d.Allow {
+	if d := e.sup.Gate(context.Background(), e.gateReq(e.agentID, "Read")); !d.Allow {
 		t.Errorf("Read gate = %+v, want allow", d)
 	}
-	if d := e.sup.Gate(context.Background(), gateReq("nobody", "Read")); d.Allow || d.Reason != "Unknown agent." {
+	if d := e.sup.Gate(context.Background(), e.gateReq("nobody", "Read")); d.Allow || d.Reason != "Unknown agent." {
 		t.Errorf("unknown agent gate = %+v, want 'Unknown agent.'", d)
 	}
 }
@@ -518,7 +554,7 @@ func TestGateDeniesWhenContextCancelled(t *testing.T) {
 	e := newEnv(t, approvalAgent)
 	ctx, cancel := context.WithCancel(context.Background())
 	got := make(chan gate.Decision, 1)
-	go func() { got <- e.sup.Gate(ctx, gateReq(e.agentID, "Bash")) }()
+	go func() { got <- e.sup.Gate(ctx, e.gateReq(e.agentID, "Bash")) }()
 	ap := waitApproval(e)
 	cancel()
 	select {

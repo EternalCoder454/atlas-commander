@@ -48,12 +48,19 @@ func (s *Supervisor) Gate(ctx context.Context, r gate.Request) gate.Decision {
 		s.mu.Unlock()
 		return deny("Unknown agent.")
 	}
+	// A request that waited through a hold is denied if its session ended or
+	// was replaced meanwhile, which shows as a.token no longer being the one
+	// it came with. After a Stop the exit can be handled before this wakes,
+	// and a restarted agent must not run an old session's call. A request
+	// that came while a start was in flight, before a.token was set, is from
+	// the new process and is let through while that start lasts.
+	waited, early := false, a.token == ""
 	for {
 		if s.overCap(a) {
 			s.mu.Unlock()
 			return deny(capDenied)
 		}
-		if a.userStopped && a.sess != nil {
+		if (a.userStopped && a.sess != nil) || (waited && a.token != r.Token && !(early && a.starting)) {
 			s.mu.Unlock()
 			return deny("This agent was stopped.")
 		}
@@ -68,6 +75,7 @@ func (s *Supervisor) Gate(ctx context.Context, r gate.Request) gate.Decision {
 			return deny("No answer")
 		}
 		s.mu.Lock()
+		waited = true
 	}
 	if !needsApproval(a.approve, r.Tool) {
 		s.mu.Unlock()

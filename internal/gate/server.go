@@ -234,6 +234,7 @@ func (s *Server) gate(c net.Conn, enc *json.Encoder, m message) {
 	}
 	req := *m.Request
 	req.AgentID = agent // never trust the client's claim
+	req.Token = m.Token
 
 	// The client sends nothing after its request, so any read result means it
 	// hung up; that cancels the decision.
