@@ -70,6 +70,7 @@ func newTasksPage(a *App) *tasksPage {
 	row.AddWidget(p.btn.edit.QWidget)
 	p.btn.dispatch = qt.NewQPushButton3("Dispatch to…")
 	p.btn.dispatch.SetToolTip("Send this task to an agent in its fleet")
+	setProp(p.btn.dispatch.QWidget, "menu", true)
 	p.menu = qt.NewQMenu(p.btn.dispatch.QWidget)
 	p.menu.OnAboutToShow(p.fillDispatchMenu)
 	p.btn.dispatch.SetMenu(p.menu)

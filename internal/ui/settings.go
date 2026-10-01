@@ -97,6 +97,7 @@ func newSettingsPage(a *App) *settingsPage {
 	p.section("Appearance")
 	p.themeCard()
 	p.accentCard()
+	p.layoutCard()
 	p.densityCard()
 	p.transparencyCard()
 	p.introCard()
@@ -583,6 +584,19 @@ func (p *settingsPage) accentCard() {
 	c.block(sw)
 }
 
+// layoutCard switches between the Simple and Advanced layouts. It takes
+// effect at once: applyLayout rebuilds the sidebar and board in place.
+func (p *settingsPage) layoutCard() {
+	s := p.settings()
+	idx := max(0, slices.Index(config.LayoutChoices, s.Layout))
+	layout := dropdown([]string{"Simple", "Advanced"}, idx, func(i int) {
+		s.Layout = config.LayoutChoices[i]
+		p.save()
+		p.app.applyLayout()
+	})
+	p.card().head("board", "Layout", "Simple shows your agents as cards with just the essentials. Advanced adds tasks, fleets, analytics, the audit log, observed sessions and the full table.", layout.QWidget)
+}
+
 func (p *settingsPage) densityCard() {
 	s := p.settings()
 	densIdx := max(0, slices.Index(config.DensityChoices, s.Density))
@@ -844,17 +858,26 @@ func (p *settingsPage) aboutCards() {
 
 	c := p.card()
 	c.head("folder", "Where Commander keeps things", "Select a path to copy it.")
+	// How this copy got here, which is also who updates it. Filled in when
+	// the background detection finishes.
+	u := p.app.updates
+	prog := c.sub("Program", u.where())
+	prog.sub.SetTextInteractionFlags(qt.TextSelectableByMouse)
+	u.render = append(u.render, func() { prog.setSub(u.where()) })
 	for _, r := range []struct{ title, path string }{
 		{"Settings", paths.Settings()},
 		{"Themes", paths.Themes()},
 		{"Audit log", paths.Database()},
 		{"Worktrees", paths.Worktrees()},
 	} {
-		l := qt.NewQLabel3(shortPath(r.path))
-		setProp(l.QWidget, "mono", true)
-		setProp(l.QWidget, "caption", true)
-		l.SetTextInteractionFlags(qt.TextSelectableByMouse)
-		c.sub(r.title, "", l.QWidget)
+		// The path is the row's description, which wraps at its separators
+		// across the row's width. As a control at the end of the row it was as
+		// wide as its text, and a long one (a data folder set by
+		// ATLAS_DATA_HOME, a deep Windows profile) pushed the whole page past
+		// the window's edge.
+		row := c.sub(r.title, shortPath(r.path))
+		setProp(row.sub.QWidget, "mono", true)
+		row.sub.SetTextInteractionFlags(qt.TextSelectableByMouse)
 	}
 }
 

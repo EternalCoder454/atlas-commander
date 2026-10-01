@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"math"
 	"slices"
+	"time"
 
 	qt "github.com/mappu/miqt/qt6"
 )
@@ -33,6 +35,21 @@ type sidebar struct {
 
 	// rects are rebuilt on every paint so hit-testing matches what is drawn.
 	rects map[string][4]int
+
+	// Animation state, all on the main thread. The active fill and pill slide
+	// from slideFrom to the active row's y as slide runs 0 to 1. drawnY is
+	// where they were last drawn, so a slide interrupted by another click
+	// starts from where the eye is. hoverR holds each row's hover fill as a
+	// ramp towards 0 or 1. tick runs only while something is moving.
+	slide     ramp
+	slideFrom float64
+	drawnY    float64
+	drawnOK   bool
+	hoverR    map[string]ramp
+	tick      *qt.QTimer
+
+	// activePainted is true once this paint has drawn the active fill.
+	activePainted bool
 }
 
 const (
@@ -48,24 +65,24 @@ const (
 )
 
 func newSidebar(app *App, items, footer []navItem) *sidebar {
-	s := &sidebar{W: qt.NewQWidget2(), app: app, items: items, footer: footer, rects: map[string][4]int{}}
+	s := &sidebar{W: qt.NewQWidget2(), app: app, items: items, footer: footer, rects: map[string][4]int{}, hoverR: map[string]ramp{}}
 	setName(s.W, "sidebar")
 	s.W.SetFixedWidth(sidebarWidth)
 	s.W.SetMouseTracking(true)
+	s.tick = qt.NewQTimer2(s.W.QObject)
+	s.tick.OnTimeout(s.kick)
 	s.W.OnPaintEvent(func(super func(*qt.QPaintEvent), ev *qt.QPaintEvent) { s.paint() })
 	s.W.OnMouseMoveEvent(func(super func(*qt.QMouseEvent), ev *qt.QMouseEvent) {
 		pos := ev.Position()
 		h := s.hit(int(pos.X()), int(pos.Y()))
 		if h != s.hover {
-			s.hover = h
+			s.setHover(h)
 			s.W.SetToolTip(s.tipFor(h))
-			s.W.Update()
 		}
 	})
 	s.W.OnLeaveEvent(func(super func(*qt.QEvent), ev *qt.QEvent) {
 		if s.hover != "" {
-			s.hover = ""
-			s.W.Update()
+			s.setHover("")
 		}
 	})
 	s.W.OnMousePressEvent(func(super func(*qt.QMouseEvent), ev *qt.QMouseEvent) {
@@ -81,15 +98,69 @@ func newSidebar(app *App, items, footer []navItem) *sidebar {
 	return s
 }
 
+// setItems swaps the rows, as when the layout changes. Hover and hit
+// rectangles belong to the old rows, so they are dropped; the next paint
+// rebuilds the rectangles.
+func (s *sidebar) setItems(items []navItem) {
+	s.items = items
+	s.hover = ""
+	clear(s.rects)
+	s.W.SetToolTip("")
+	s.W.Update()
+}
+
 func (s *sidebar) select_(id string) {
 	if id == s.active {
 		return
 	}
+	// Slide only when the eye has somewhere to slide from and to; otherwise
+	// (first paint, coming from the agent page, row not in the list) jump.
+	s.slide = ramp{}
+	if _, ok := s.rects[id]; ok && s.drawnOK && s.active != "" {
+		s.slideFrom = s.drawnY
+		s.slide = s.slide.retarget(time.Now(), 1, navSlideMs)
+	}
 	s.active = id
-	s.W.Update()
+	s.kick()
 	if s.onSelect != nil {
 		s.onSelect(id)
 	}
+}
+
+// setHover moves the hover highlight to the row with this id ("" for none):
+// the old row fades out and the new one fades in, each from wherever it is.
+func (s *sidebar) setHover(id string) {
+	now := time.Now()
+	if old := s.hover; old != "" {
+		s.hoverR[old] = s.hoverR[old].retarget(now, 0, hoverOutMs)
+	}
+	s.hover = id
+	if id != "" {
+		s.hoverR[id] = s.hoverR[id].retarget(now, 1, hoverInMs)
+	}
+	s.kick()
+}
+
+// kick repaints and keeps the frame timer running only while a slide or a
+// hover fade is unfinished, so an idle sidebar costs nothing. Rows whose
+// hover has faded out are forgotten here.
+func (s *sidebar) kick() {
+	now := time.Now()
+	moving := !s.slide.done(now)
+	for id, r := range s.hoverR {
+		switch {
+		case !r.done(now):
+			moving = true
+		case r.to == 0:
+			delete(s.hoverR, id)
+		}
+	}
+	if moving && !s.tick.IsActive() {
+		s.tick.Start(animFrameMs)
+	} else if !moving && s.tick.IsActive() {
+		s.tick.Stop()
+	}
+	s.W.Update()
 }
 
 func (s *sidebar) hit(x, y int) string {
@@ -109,6 +180,22 @@ func (s *sidebar) paint() {
 	painter.SetRenderHint(qt.QPainter__Antialiasing)
 
 	w := s.W.Width()
+	now := time.Now()
+
+	// The active fill is drawn first, from the previous paint's row
+	// positions, because it may be between two rows. drawRow below paints it
+	// itself when there are no previous positions or they were stale.
+	s.activePainted = false
+	if r, ok := s.rects[s.active]; ok && s.active != "" {
+		y := float64(r[1])
+		if !s.slide.done(now) {
+			y = lerp(s.slideFrom, y, s.slide.at(now))
+		}
+		s.drawActive(painter, r[0], y, r[2])
+		s.activePainted = true
+	} else {
+		s.drawnOK = false
+	}
 	clear(s.rects)
 
 	font := s.W.Font()
@@ -136,13 +223,10 @@ func (s *sidebar) paint() {
 		rw := w - 2*navGutter
 		s.rects[it.id] = [4]int{x, y, rw, navRowH}
 		var fill float64
-		switch {
-		case it.id == s.active:
-			fill = 0.08
-		case it.id == s.hover:
-			fill = 0.05
+		if it.id != s.active {
+			fill = 0.05 * s.hoverR[it.id].at(now)
 		}
-		if fill > 0 {
+		if fill > 0.001 {
 			c := p.fg.q(fill)
 			b := qt.NewQBrush3(c)
 			painter.SetPenWithStyle(qt.NoPen)
@@ -152,12 +236,15 @@ func (s *sidebar) paint() {
 			c.Delete()
 		}
 		if it.id == s.active {
-			c := p.accent.q(1)
-			b := qt.NewQBrush3(c)
-			painter.SetBrush(b)
-			painter.DrawRoundedRect(rectf(float64(x), float64(y+(navRowH-16)/2), 3, 16), 1.5, 1.5)
-			b.Delete()
-			c.Delete()
+			if !s.activePainted {
+				s.drawActive(painter, x, float64(y), rw)
+			} else if s.slide.done(now) && math.Abs(float64(y)-s.drawnY) > 0.5 {
+				// The layout moved since the last paint (a resize or a
+				// changed item list): draw in the right place now and
+				// repaint once more so the stale one is gone.
+				s.drawActive(painter, x, float64(y), rw)
+				s.W.Update()
+			}
 		}
 		painter.SetFont(font)
 		painter.SetPen(text)
@@ -195,6 +282,26 @@ func (s *sidebar) paint() {
 	for _, it := range s.footer {
 		drawRow(it)
 	}
+}
+
+// drawActive paints the active row's 8% fill and accent pill with the row's
+// top edge at y, and remembers y for the next slide to start from.
+func (s *sidebar) drawActive(painter *qt.QPainter, x int, y float64, rw int) {
+	p := s.app.pal
+	s.drawnY, s.drawnOK = y, true
+	painter.SetPenWithStyle(qt.NoPen)
+	c := p.fg.q(0.08)
+	b := qt.NewQBrush3(c)
+	painter.SetBrush(b)
+	painter.DrawRoundedRect(rectf(float64(x), y, float64(rw), navRowH), 5, 5)
+	b.Delete()
+	c.Delete()
+	c = p.accent.q(1)
+	b = qt.NewQBrush3(c)
+	painter.SetBrush(b)
+	painter.DrawRoundedRect(rectf(float64(x), y+float64(navRowH-16)/2, 3, 16), 1.5, 1.5)
+	b.Delete()
+	c.Delete()
 }
 
 // pageFrame paints the rounded sheet the views sit on: the page colour with

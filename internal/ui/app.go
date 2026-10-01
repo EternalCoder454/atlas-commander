@@ -123,6 +123,11 @@ func New(o Options) *App {
 	qt.QGuiApplication_SetDesktopFileName("com.atlas.Commander")
 	a.qapp = qt.NewQApplication(os.Args)
 	qt.QApplication_SetStyleWithStyle("Fusion")
+	// Menus and dropdown lists get the same rounded corners as the window,
+	// and only where the window can be translucent too.
+	if transparencyPlatform() {
+		qtx.RoundPopups()
+	}
 
 	a.mono = loadFonts(a.settings.MonoFont)
 	theme.IndicatorDir = filepath.Join(paths.Runtime(), "style")
@@ -145,11 +150,12 @@ func (a *App) Run() int {
 	// picks the page, which is a development capture.
 	var in *intro
 	if a.settings.ShowIntro && qtx.AnimationsEnabled() && os.Getenv("ATLAS_VIEW") == "" {
-		in = newIntro(a, "Commander", nil)
+		in = newIntro(a, "Commander", a.updates.releaseOffer)
 	}
 	a.win.Show()
+	a.updates.startDetect()
 	if a.settings.UpdateCheck {
-		a.updates.startCheck()
+		a.updates.startLaunchCheck(in != nil)
 	}
 	if in != nil {
 		in.begin()
@@ -386,11 +392,12 @@ func (a *App) build() {
 	if v := os.Getenv("ATLAS_VIEW"); v != "" {
 		start = v
 	}
-	if _, ok := pageMakers[start]; !ok {
+	if _, ok := pageMakers[start]; !ok || !a.layoutShows(start) {
 		start = "board"
 	}
 	a.side.active = ""
 	a.side.select_(start)
+	a.applyLayout()
 
 	a.win.OnCloseEvent(func(super func(*qt.QCloseEvent), ev *qt.QCloseEvent) {
 		a.saveWindow()
@@ -431,6 +438,10 @@ func (a *App) buildHeader() *qt.QWidget {
 	a.header.killAll = qt.NewQPushButton3("Kill all")
 	a.header.killAll.SetProperty("danger", qt.NewQVariant8(true))
 	a.header.killAll.SetToolTip("Stop every running agent at once")
+	// A click doesn't leave the focus ring on it: the button usually disables
+	// itself once the agents are gone, and a ring round a destructive button
+	// reads as an invitation to press Enter. Tab still reaches it.
+	a.header.killAll.SetFocusPolicy(qt.TabFocus)
 	a.header.killAll.OnClicked(a.confirmKillAll)
 	l.AddWidget(a.header.killAll.QWidget)
 
@@ -456,7 +467,7 @@ func (a *App) navItems() []navItem {
 			return ""
 		}
 	}
-	return []navItem{
+	all := []navItem{
 		{id: "g-fleet", title: "Fleet", group: true},
 		{id: "board", title: "Board", tip: "See every agent at a glance and start, hold or stop them.", badge: count(func(s *fleet.Snapshot) int {
 			n := 0
@@ -483,6 +494,7 @@ func (a *App) navItems() []navItem {
 		{id: "audit", title: "Audit log", tip: "Read the permanent record of events and decisions."},
 		{id: "observed", title: "Observed", tip: "Watch Claude Code sessions started outside Commander."},
 	}
+	return a.layoutNav(all)
 }
 
 func (a *App) addPage(id string, p page) {
@@ -513,8 +525,7 @@ func (a *App) show(id string) {
 		}
 		a.addPage(id, p)
 	}
-	a.current = id
-	a.stack.SetCurrentWidget(p.widget())
+	a.switchTo(id, p.widget())
 	if a.snap != nil {
 		p.refresh(a.snap)
 	}
@@ -654,8 +665,7 @@ func (a *App) openAgent(id string) {
 	d.setAgent(id)
 	a.side.active = ""
 	a.side.W.Update()
-	a.current = "agent"
-	a.stack.SetCurrentWidget(d.widget())
+	a.switchTo("agent", d.widget())
 	if a.snap != nil {
 		d.refresh(a.snap)
 	}

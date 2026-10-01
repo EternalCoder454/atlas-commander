@@ -51,7 +51,9 @@ const (
 	// package manager is the one that updates it.
 	FromPackage
 	// Standalone is anything else: an unpacked release tarball or zip. There is
-	// no checkout to pull and nothing to rebuild from.
+	// no checkout to pull, so on Linux the first update fetches one (see
+	// Bootstrap), and once that builds and installs, make install records it
+	// and the copy is FromSource from then on.
 	Standalone
 )
 
@@ -70,6 +72,10 @@ type Install struct {
 	// "apt", "dnf", "zypper", "yum" or "rpm".
 	Manager string
 	Package string
+	// Writable is set for a Standalone copy installed into a bin folder this
+	// account can write to, such as ~/.local/bin after install.sh. Only then
+	// can a build from fetched source be installed back over it.
+	Writable bool
 }
 
 // Prefix is the install prefix the running copy lives under (the directory
@@ -93,8 +99,58 @@ func within(dir, path string) bool {
 	return err == nil && rel != "." && !strings.HasPrefix(rel, "..")
 }
 
-// SelfUpdatable is whether Commander can apply an update itself.
-func (in Install) SelfUpdatable() bool { return CanSelfInstall && in.Kind == FromSource }
+// SelfUpdatable is whether Commander can apply an update itself: a checkout it
+// can pull and rebuild, or a standalone copy it can fetch the source for and
+// install back over. Never a copy a package manager owns.
+func (in Install) SelfUpdatable() bool {
+	if !CanSelfInstall {
+		return false
+	}
+	switch in.Kind {
+	case FromSource:
+		return true
+	case Standalone:
+		return in.Writable
+	}
+	return false
+}
+
+// inPrefix reports whether a standalone binary sits in an install prefix's bin
+// folder, as install.sh puts it. A copy run from the folder its tarball
+// unpacked into has no prefix: installing "over" it would write bin/ and share/
+// into the folder above. Nor does a development build in a checkout's own bin/,
+// where the prefix would be the source tree.
+func inPrefix(binary string) bool {
+	if binary == "" || filepath.Base(filepath.Dir(binary)) != "bin" {
+		return false
+	}
+	return !looksLikeCheckout(filepath.Dir(filepath.Dir(binary)))
+}
+
+// canInstallInto reports whether make install can write a build into prefix:
+// the program into bin, and the launcher and icons under share. A writable bin
+// beside a share owned by root would build for minutes and then fail to
+// install. A share that is not there yet is created in the prefix.
+func canInstallInto(prefix string) bool {
+	share := filepath.Join(prefix, "share")
+	if _, err := os.Stat(share); err != nil {
+		share = prefix
+	}
+	return writable(filepath.Join(prefix, "bin")) && writable(share)
+}
+
+// writable reports whether this account can create files in dir. Permission
+// bits are not enough to go on (a read-only mount looks writable), so it tries.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".atlas-write-check-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	f.Close()
+	os.Remove(name)
+	return true
+}
 
 // UpdateCommand is the command that updates a packaged install, or "".
 func (in Install) UpdateCommand() string {
@@ -167,9 +223,16 @@ func Wording(in Install) (heading, body string) {
 				"Installing over it from here would leave the package database describing " +
 				"a file that is no longer there."
 	}
+	if inPrefix(in.Binary) {
+		return "Update needs permission",
+			"Atlas Commander is installed in " + in.Prefix() + ", which this account can't " +
+				"write to. Download the new version and run its install.sh with administrator " +
+				"rights, the way this one was installed."
+	}
 	return "Download the new version",
-		"This copy was not built from a checkout, so it can't rebuild itself. " +
-			"Download the new version and unpack it over this one, with Commander closed."
+		"This copy runs from the folder it was unpacked into, so it can't install a new " +
+			"version over itself. Download the new version and unpack it over this one, with " +
+			"Commander closed. Installing it with install.sh lets later updates install from here."
 }
 
 // DownloadPage is where a new build for a channel is.
@@ -287,6 +350,7 @@ func detect(sourceFile, exe string, owner func(path string) (manager, pkg string
 		}
 	}
 	in.Kind = Standalone
+	in.Writable = inPrefix(exe) && canInstallInto(in.Prefix())
 	return in
 }
 

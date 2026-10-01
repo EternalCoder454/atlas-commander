@@ -39,21 +39,31 @@ func chevronPath(fg string) string {
 	return filepath.ToSlash(filepath.Join(IndicatorDir, "chevron-"+strings.TrimPrefix(fg, "#")+".svg"))
 }
 
-// WriteChevron writes the dropdown arrow for text colour fg into
-// IndicatorDir if it is not there yet. It is Material Symbols'
-// keyboard_arrow_down.
+// dimChevronPath is the chevron a disabled control shows, faded as its text is.
+func dimChevronPath(fg string) string {
+	return filepath.ToSlash(filepath.Join(IndicatorDir, "chevron-"+strings.TrimPrefix(fg, "#")+"-dim.svg"))
+}
+
+// WriteChevron writes the dropdown arrow for text colour fg, and its faded
+// twin for disabled controls, into IndicatorDir if they are not there yet. It
+// is Material Symbols' keyboard_arrow_down.
 func WriteChevron(fg string) error {
 	if IndicatorDir == "" || !isHex(fg) {
-		return nil
-	}
-	path := chevronPath(fg)
-	if _, err := os.Stat(path); err == nil {
 		return nil
 	}
 	if err := os.MkdirAll(IndicatorDir, 0o700); err != nil {
 		return err
 	}
-	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960">`+
-		`<path d="M480-333 240-573l51-51 189 189 189-189 51 51-240 240Z" fill="%s" fill-opacity="0.75"/></svg>`, fg)
-	return os.WriteFile(path, []byte(svg), 0o600)
+	for _, f := range []struct{ path, opacity string }{{chevronPath(fg), "0.75"}, {dimChevronPath(fg), "0.4"}} {
+		path, opacity := f.path, f.opacity
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
+		svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960">`+
+			`<path d="M480-333 240-573l51-51 189 189 189-189 51 51-240 240Z" fill="%s" fill-opacity="%s"/></svg>`, fg, opacity)
+		if err := os.WriteFile(path, []byte(svg), 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
 }

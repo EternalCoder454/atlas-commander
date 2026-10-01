@@ -258,3 +258,42 @@ func TestPhoneAccessDefaultsOffAndPortIsClamped(t *testing.T) {
 		t.Errorf("load: got %v %d %v, want true 1024 nil", s.PhoneAccess, s.PhonePort, err)
 	}
 }
+
+// Existing users must keep the layout they know: a file with no "layout" key
+// predates the setting, so it loads as advanced.
+func TestLoadMissingLayoutKeepsAdvanced(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(p, []byte(`{"density":"compact"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Layout != LayoutAdvanced {
+		t.Errorf("layout of old file: got %q, want %q", s.Layout, LayoutAdvanced)
+	}
+	if err := os.WriteFile(p, []byte(`{"layout":"simple"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ = Load(p); s.Layout != LayoutSimple {
+		t.Errorf("explicit simple: got %q, want %q", s.Layout, LayoutSimple)
+	}
+	if s, _ = Load(filepath.Join(dir, "none.json")); s.Layout != LayoutSimple {
+		t.Errorf("missing file: got %q, want %q", s.Layout, LayoutSimple)
+	}
+}
+
+// New users should land on the easy layout, and junk must not lock anyone out.
+func TestDefaultsAreSimple(t *testing.T) {
+	if got := Defaults().Layout; got != LayoutSimple {
+		t.Errorf("default layout: got %q, want %q", got, LayoutSimple)
+	}
+	if got := NormalizeLayout("weird"); got != LayoutSimple {
+		t.Errorf("junk layout: got %q, want %q", got, LayoutSimple)
+	}
+	if got := NormalizeLayout(" Advanced "); got != LayoutAdvanced {
+		t.Errorf("advanced layout: got %q, want %q", got, LayoutAdvanced)
+	}
+}
