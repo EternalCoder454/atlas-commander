@@ -104,7 +104,9 @@ func checkGit(src, channel, installed string) (Info, error) {
 	// is not. Without a record of the built commit, HEAD is the best guess.
 	built := "HEAD"
 	if installed != "" {
-		if _, err := git(src, "rev-parse", "--verify", "--quiet", installed+"^{commit}"); err == nil {
+		// cat-file -t rather than the rev^{commit} syntax: MSYS2's git, run
+		// from a Windows program, glob-expands braces in its arguments.
+		if t, err := git(src, "cat-file", "-t", installed); err == nil && t == "commit" {
 			built = installed
 			local = installed
 			if len(local) > 7 {
