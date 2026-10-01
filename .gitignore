@@ -1,0 +1,6 @@
+/bin/
+/CLAUDE.md
+/.claude/
+*.test
+*.prof
+*.syso
