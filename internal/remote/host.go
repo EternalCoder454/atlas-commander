@@ -13,8 +13,9 @@ type Status struct {
 	Port int
 	// Listening is the "host:port" to show ("192.168.1.5:47821"), "" while off.
 	Listening string
-	// Link is the pairing link, "" while off.
-	Link string
+	// Note is a sentence worth showing next to the status, such as a renewed
+	// certificate, or "".
+	Note string
 	// Err is a plain sentence when phone access is on but not working.
 	Err string
 }
@@ -30,6 +31,7 @@ type Host struct {
 	port   int
 	on     bool
 	err    string
+	note   string
 	link   string
 	first  string // the address shown as "Listening on"
 	linkAt time.Time
@@ -57,6 +59,7 @@ func (h *Host) Enable(port int) {
 		}
 		h.srv = srv
 	}
+	h.note = h.srv.Notice()
 	if err := h.srv.Start(net.JoinHostPort("", strconv.Itoa(port))); err != nil {
 		h.err = err.Error()
 		return
@@ -70,7 +73,7 @@ func (h *Host) Disable() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.stopLocked()
-	h.on, h.err, h.link = false, "", ""
+	h.on, h.err, h.link, h.note = false, "", "", ""
 }
 
 func (h *Host) stopLocked() {
@@ -94,7 +97,9 @@ func (h *Host) Forget() error {
 	return h.srv.ResetToken()
 }
 
-// Status reports the current state.
+// Status reports the current state. It never carries the pairing link: that
+// is a credential, so the settings page asks for it with PairingLink only
+// while the user has chosen to show it.
 func (h *Host) Status() Status {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -102,14 +107,30 @@ func (h *Host) Status() Status {
 	if !h.on || h.err != "" || h.srv == nil {
 		return st
 	}
+	h.refreshLinkLocked()
+	st.Listening, st.Note = h.first, h.note
+	return st
+}
+
+// PairingLink is the link a phone pairs with, or "" while access is off or
+// not working.
+func (h *Host) PairingLink() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.on || h.err != "" || h.srv == nil {
+		return ""
+	}
+	h.refreshLinkLocked()
+	return h.link
+}
+
+func (h *Host) refreshLinkLocked() {
 	if h.linkAt.IsZero() || time.Since(h.linkAt) > linkMaxAge {
 		hosts := Hosts(h.port)
 		h.link = PairingLink(h.opt.Name, hosts, h.srv.Token(), h.srv.Fingerprint())
 		h.linkAt = time.Now()
 		h.first = firstOr(hosts, net.JoinHostPort("localhost", strconv.Itoa(h.port)))
 	}
-	st.Link, st.Listening = h.link, h.first
-	return st
 }
 
 func firstOr(hosts []string, def string) string {

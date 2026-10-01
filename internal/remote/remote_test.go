@@ -243,8 +243,8 @@ func TestApprovalDecisionReachesController(t *testing.T) {
 	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"ok":true}` {
 		t.Fatalf("got %d %s, want 200 {\"ok\":true}", w.Code, w.Body.String())
 	}
-	if len(f.decided) != 1 || f.decided[0] != "p9:deny:too risky" {
-		t.Errorf("got decisions %v, want [p9:deny:too risky]", f.decided)
+	if len(f.decided) != 1 || f.decided[0] != "p9:deny:From phone: too risky" {
+		t.Errorf("got decisions %v, want [p9:deny:From phone: too risky]", f.decided)
 	}
 	if w := do(t, s, "POST", "/api/v1/approvals/nope", s.Token(), `{"allow":true}`, ""); w.Code != 404 {
 		t.Errorf("unknown approval: got status %d, want 404", w.Code)
@@ -372,16 +372,16 @@ func TestHostsOrderAndFilter(t *testing.T) {
 // Turning access on and off in Settings must really open and close the port.
 func TestHostEnableDisable(t *testing.T) {
 	h := NewHost(Options{Controller: newFake(), Dir: t.TempDir(), Name: "pc"})
-	if st := h.Status(); st.On || st.Link != "" {
+	if st := h.Status(); st.On {
 		t.Fatalf("new host should be off, got %+v", st)
 	}
 	h.Enable(0)
 	st := h.Status()
-	if !st.On || st.Err != "" || !strings.HasPrefix(st.Link, "atlascommander://pair?") {
+	if !st.On || st.Err != "" || !strings.HasPrefix(h.PairingLink(), "atlascommander://pair?") {
 		t.Fatalf("got %+v, want on with a link", st)
 	}
 	h.Disable()
-	if st := h.Status(); st.On || st.Link != "" {
+	if st := h.Status(); st.On {
 		t.Errorf("got %+v, want off", st)
 	}
 	// A port that is taken gives a sentence, not a crash.

@@ -57,9 +57,15 @@ func startPhone(ctl remote.Controller, settings config.Settings, demoMode bool) 
 	if name == "" {
 		name = "Atlas Commander PC"
 	}
+	// Demo mode gets its own folder: it must never read or create the real
+	// phone certificate and token, or a demo run could pair with them.
+	dir := "phone"
+	if demoMode {
+		dir = "phone-demo"
+	}
 	h := remote.NewHost(remote.Options{
 		Controller: ctl,
-		Dir:        filepath.Join(paths.Data(), "phone"),
+		Dir:        filepath.Join(paths.Data(), dir),
 		Name:       name,
 		Version:    strings.TrimSpace(atlascommander.Version()),
 		Demo:       demoMode,
@@ -178,7 +184,9 @@ func run(settings config.Settings) int {
 	sup.Store(s)
 
 	phoneHost := startPhone(s, settings, false)
-	defer phoneHost.Disable() // runs before s.Close, so no request reaches a closed supervisor
+	// Disable waits up to two seconds for requests in flight, and runs before
+	// s.Close, so no handler is still inside a closed supervisor.
+	defer phoneHost.Disable()
 
 	app := ui.New(ui.Options{Controller: s, Version: atlascommander.Version(), Settings: settings})
 	srv.SetOnActivate(app.Raise)

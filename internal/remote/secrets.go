@@ -25,23 +25,29 @@ import (
 // self-signed ECDSA P-256 certificate valid for ten years. The phone pins the
 // fingerprint, so the certificate must stay the same between runs: a new one
 // would unpair every phone.
-func loadOrCreateCert(dir string) (tls.Certificate, string, error) {
+//
+// renewed is true when a certificate was already on disk but could not be
+// used (corrupt or expired), so phones paired with the old one must pair again.
+func loadOrCreateCert(dir string) (cert tls.Certificate, fp string, renewed bool, err error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	certPath, keyPath := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
-	if cert, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil && len(cert.Certificate) > 0 {
-		if c, perr := x509.ParseCertificate(cert.Certificate[0]); perr == nil && time.Now().Before(c.NotAfter) {
-			return cert, fingerprint(cert.Certificate[0]), nil
+	if old, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil && len(old.Certificate) > 0 {
+		if c, perr := x509.ParseCertificate(old.Certificate[0]); perr == nil && time.Now().Before(c.NotAfter) {
+			return old, fingerprint(old.Certificate[0]), false, nil
 		}
 	}
+	_, certErr := os.Stat(certPath)
+	_, keyErr := os.Stat(keyPath)
+	renewed = certErr == nil || keyErr == nil
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
 	if err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	now := time.Now()
 	tmpl := &x509.Certificate{
@@ -55,25 +61,25 @@ func loadOrCreateCert(dir string) (tls.Certificate, string, error) {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	keyDER, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	if err := atomicfile.WriteFile(keyPath, keyPEM, 0o600); err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
 	if err := atomicfile.WriteFile(certPath, certPEM, 0o600); err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	cert, err = tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
-		return tls.Certificate{}, "", err
+		return tls.Certificate{}, "", false, err
 	}
-	return cert, fingerprint(der), nil
+	return cert, fingerprint(der), renewed, nil
 }
 
 func fingerprint(der []byte) string {
@@ -109,4 +115,18 @@ func newToken(dir string) (string, error) {
 		return "", err
 	}
 	return tok, nil
+}
+
+// certRenewedNotice is shown in Settings when the certificate had to be made
+// again, because every phone pinned the old fingerprint.
+const certRenewedNotice = "The certificate was renewed, so phones must pair again."
+
+// tightenPerms makes the folder private and the key and token readable only
+// by the user, in case an older build or a backup restore left them looser.
+// Failures are ignored: the files still work, and on Windows modes mean little.
+func tightenPerms(dir string) {
+	_ = os.Chmod(dir, 0o700)
+	for _, name := range []string{"key.pem", "token"} {
+		_ = os.Chmod(filepath.Join(dir, name), 0o600)
+	}
 }

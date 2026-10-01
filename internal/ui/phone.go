@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	qt "github.com/mappu/miqt/qt6"
 	"rsc.io/qr"
@@ -18,7 +19,16 @@ type Phone interface {
 	Disable()
 	Forget() error
 	Status() remote.Status
+	// PairingLink is a credential: ask for it only while showing it.
+	PairingLink() string
 }
+
+const (
+	// pairingShownFor is how long the QR code and link stay up once shown.
+	pairingShownFor = 2 * time.Minute
+	// clipboardKeep is how long a copied link stays on the clipboard.
+	clipboardKeep = time.Minute
+)
 
 // phone is set once from main before Run, which also starts the server when
 // the setting is on. A package variable rather than an
@@ -36,10 +46,22 @@ func SetPhone(p Phone) { phone = p }
 type phoneCards struct {
 	status  *settingRow
 	pairing *qt.QFrame
+	reveal  *qt.QWidget // the QR code, link and Copy button; hidden until asked for
+	show    *qt.QPushButton
+	copy    *qt.QPushButton
 	qr      *qt.QLabel
 	link    *qt.QLabel
 	hint    *qt.QLabel
 	last    remote.Status
+
+	// shownUntil is when the code hides itself; zero while hidden. shownLink
+	// is what is drawn now, so the QR is only redrawn when it changes.
+	shownUntil time.Time
+	shownLink  string
+	// clipLink is the link last copied, and clipAt when to take it back off
+	// the clipboard; zero when nothing is pending.
+	clipLink string
+	clipAt   time.Time
 }
 
 // phoneSection adds the Phone section, or nothing when there is no server.
@@ -89,18 +111,41 @@ func (p *settingsPage) phoneSection() {
 	pl := qt.NewQVBoxLayout(pc.pairing.QWidget)
 	pl.SetContentsMargins(settingIndent, 14, 14, 14)
 	pl.SetSpacing(10)
-	pl.AddWidget(wrapLabel("Scan this with the Atlas Commander app, or copy the link and paste it there.").QWidget)
+	pl.AddWidget(wrapLabel("To pair a phone, show the code and scan it with the Atlas Commander app, or copy the link and paste it there. Anyone who gets the code can control your agents, so it hides again after two minutes.").QWidget)
+
+	pc.reveal = qt.NewQWidget2()
+	rl := qt.NewQVBoxLayout(pc.reveal)
+	rl.SetContentsMargins(0, 0, 0, 0)
+	rl.SetSpacing(10)
 	pc.qr = qt.NewQLabel2()
-	pl.AddWidget3(pc.qr.QWidget, 0, qt.AlignLeft)
+	rl.AddWidget3(pc.qr.QWidget, 0, qt.AlignLeft)
 	pc.link = wrapCaption("")
 	setProp(pc.link.QWidget, "mono", true)
 	pc.link.SetTextInteractionFlags(qt.TextSelectableByMouse)
-	pl.AddWidget(pc.link.QWidget)
+	rl.AddWidget(pc.link.QWidget)
+	pc.copy = qt.NewQPushButton3("Copy link")
+	pc.copy.OnClicked(func() {
+		link := phone.PairingLink()
+		if link == "" {
+			return
+		}
+		qt.QGuiApplication_Clipboard().SetText(link)
+		pc.clipLink, pc.clipAt = link, time.Now().Add(clipboardKeep)
+		pc.copy.SetText("Copied")
+	})
+	rl.AddWidget3(pc.copy.QWidget, 0, qt.AlignLeft)
+	pc.reveal.SetVisible(false)
+	pl.AddWidget(pc.reveal)
+
 	buttons := qt.NewQHBoxLayout2()
-	cp := qt.NewQPushButton3("Copy link")
-	cp.OnClicked(func() {
-		qt.QGuiApplication_Clipboard().SetText(pc.last.Link)
-		cp.SetText("Copied")
+	pc.show = qt.NewQPushButton3("Show pairing code")
+	pc.show.OnClicked(func() {
+		if pc.shownUntil.IsZero() {
+			pc.shownUntil = time.Now().Add(pairingShownFor)
+		} else {
+			pc.shownUntil = time.Time{}
+		}
+		p.phoneRefresh()
 	})
 	forget := qt.NewQPushButton3("Forget paired phones")
 	forget.OnClicked(func() {
@@ -109,10 +154,11 @@ func (p *settingsPage) phoneSection() {
 			return
 		}
 		p.app.report(phone.Forget())
-		cp.SetText("Copy link")
+		pc.copy.SetText("Copy link")
+		pc.shownLink = ""
 		p.phoneRefresh()
 	})
-	buttons.AddWidget(cp.QWidget)
+	buttons.AddWidget(pc.show.QWidget)
 	buttons.AddWidget(forget.QWidget)
 	buttons.AddStretch()
 	pl.AddLayout(buttons.QLayout)
@@ -125,36 +171,76 @@ func (p *settingsPage) phoneSection() {
 }
 
 // phoneRefresh reads the server's status and brings the section in line. The
-// QR code is only redrawn when the link changes.
+// pairing link is only fetched while the code is shown, and the code hides
+// itself after pairingShownFor.
 func (p *settingsPage) phoneRefresh() {
 	pc := p.phone
 	if pc == nil || phone == nil {
 		return
 	}
 	st := phone.Status()
-	if st == pc.last {
+	if !pc.shownUntil.IsZero() && (!time.Now().Before(pc.shownUntil) || !st.On || st.Err != "") {
+		pc.shownUntil = time.Time{}
+	}
+	shown := !pc.shownUntil.IsZero()
+	if st != pc.last {
+		pc.last = st
+		switch {
+		case st.Err != "":
+			pc.status.setSub(capitalise(st.Err))
+		case st.On && st.Note != "":
+			pc.status.setSub("Listening on " + st.Listening + ". " + st.Note)
+		case st.On:
+			pc.status.setSub("Listening on " + st.Listening)
+		default:
+			pc.status.setSub("Off")
+		}
+		pc.pairing.SetVisible(st.On && st.Err == "")
+		pc.hint.SetVisible(st.On)
+		pc.hint.SetText(fmt.Sprintf("If your phone can't connect, your firewall may be blocking the port. On Fedora: "+
+			"sudo firewall-cmd --add-port=%d/tcp --permanent && sudo firewall-cmd --reload", st.Port))
+	}
+	pc.reveal.SetVisible(shown)
+	if shown {
+		pc.show.SetText("Hide pairing code")
+		if link := phone.PairingLink(); link != pc.shownLink {
+			pc.shownLink = link
+			pc.link.SetText(link)
+			drawQR(pc.qr, link)
+		}
+	} else {
+		pc.show.SetText("Show pairing code")
+		if pc.shownLink != "" {
+			pc.shownLink = ""
+			pc.link.SetText("")
+			pc.qr.Clear()
+		}
+		pc.copy.SetText("Copy link")
+	}
+}
+
+// phoneHide hides the pairing code at once, for when the user leaves the page.
+func (p *settingsPage) phoneHide() {
+	if p.phone != nil && !p.phone.shownUntil.IsZero() {
+		p.phone.shownUntil = time.Time{}
+		p.phoneRefresh()
+	}
+}
+
+// phoneClipboardTick takes the pairing link back off the clipboard once its
+// time is up, but only if the clipboard still holds it: something the user
+// copied since is theirs. It runs from the app's tick, not the page's, so it
+// still fires after the user has moved to another page.
+func (p *settingsPage) phoneClipboardTick() {
+	pc := p.phone
+	if pc == nil || pc.clipAt.IsZero() || time.Now().Before(pc.clipAt) {
 		return
 	}
-	linkChanged := st.Link != pc.last.Link
-	pc.last = st
-
-	switch {
-	case st.Err != "":
-		pc.status.setSub(capitalise(st.Err))
-	case st.On:
-		pc.status.setSub("Listening on " + st.Listening)
-	default:
-		pc.status.setSub("Off")
+	cb := qt.QGuiApplication_Clipboard()
+	if cb.Text() == pc.clipLink {
+		cb.Clear()
 	}
-	showing := st.On && st.Err == "" && st.Link != ""
-	pc.pairing.SetVisible(showing)
-	pc.hint.SetVisible(st.On)
-	pc.hint.SetText(fmt.Sprintf("If your phone can't connect, your firewall may be blocking the port. On Fedora: "+
-		"sudo firewall-cmd --add-port=%d/tcp --permanent && sudo firewall-cmd --reload", st.Port))
-	if showing && linkChanged {
-		pc.link.SetText(st.Link)
-		drawQR(pc.qr, st.Link)
-	}
+	pc.clipLink, pc.clipAt = "", time.Time{}
 }
 
 // drawQR paints the link as a QR code on a white square with the quiet zone

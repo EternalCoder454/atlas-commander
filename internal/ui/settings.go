@@ -120,6 +120,7 @@ func newSettingsPage(a *App) *settingsPage {
 	p.col.AddStretch()
 
 	p.w.OnHideEvent(func(super func(*qt.QHideEvent), ev *qt.QHideEvent) {
+		p.phoneHide()
 		for _, f := range p.flush {
 			f()
 		}
