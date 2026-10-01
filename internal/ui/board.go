@@ -137,6 +137,7 @@ type boardPage struct {
 	empty      *qt.QWidget
 	guide      *startGuide
 	table      *qt.QTableView
+	cmdBar     *qt.QWidget // the Start/Hold/.../Open row; hidden in Simple
 	model      *qt.QAbstractTableModel
 	delegate   *qt.QStyledItemDelegate
 
@@ -159,6 +160,16 @@ type boardPage struct {
 	blank *qt.QVariant
 
 	monoF *qt.QFont
+
+	// Simple layout: agent cards in a grid instead of the table.
+	simple     bool
+	cardScroll *qt.QScrollArea
+	cardHost   *qt.QWidget
+	cardGrid   *qt.QGridLayout
+	cards      map[string]*agentCard // by agent id
+	cardPlaced []string              // ids in the grid, in order
+	cardWanted []string
+	cardCols   int
 }
 
 func newBoardPage(a *App) *boardPage {
@@ -192,7 +203,11 @@ func newBoardPage(a *App) *boardPage {
 	charts.AddWidget(b.cost.W)
 	l.AddLayout(charts.QLayout)
 
-	l.AddLayout(b.buildCommands().QLayout)
+	b.cmdBar = qt.NewQWidget2()
+	cmds := b.buildCommands()
+	b.cmdBar.SetLayout(cmds.QLayout)
+	cmds.SetContentsMargins(0, 0, 0, 0)
+	l.AddWidget(b.cmdBar)
 
 	b.views = qt.NewQStackedWidget2()
 	b.guide = newStartGuide(a)
@@ -201,6 +216,8 @@ func newBoardPage(a *App) *boardPage {
 
 	b.buildTable()
 	b.views.AddWidget(b.table.QWidget)
+	b.buildCards()
+	b.views.AddWidget(b.cardScroll.QWidget)
 	l.AddWidget(b.views.QWidget)
 
 	a.themed = append(a.themed, b.themeChanged)
@@ -623,10 +640,11 @@ func (b *boardPage) refresh(s *fleet.Snapshot) {
 	}
 	if len(rows) == 0 {
 		b.guide.refresh(s)
-		b.views.SetCurrentWidget(b.empty)
-	} else {
-		b.views.SetCurrentWidget(b.table.QWidget)
 	}
+	if b.simple {
+		b.refreshCards()
+	}
+	b.showRows()
 	b.updateButtons()
 }
 

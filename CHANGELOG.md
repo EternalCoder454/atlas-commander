@@ -5,6 +5,9 @@ it. One short line per change, no jargon — this is what the update prompt show
 
 ## 0.1.1-beta
 
+- A Simple layout for new commanders: your agents as cards, with Approvals and Settings; switch to Advanced in Settings
+- Existing setups keep the Advanced layout
+
 ## 0.1.0
 
 - First beta: run a fleet of Claude agents and watch them all from one window

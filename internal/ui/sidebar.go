@@ -81,6 +81,17 @@ func newSidebar(app *App, items, footer []navItem) *sidebar {
 	return s
 }
 
+// setItems swaps the rows, as when the layout changes. Hover and hit
+// rectangles belong to the old rows, so they are dropped; the next paint
+// rebuilds the rectangles.
+func (s *sidebar) setItems(items []navItem) {
+	s.items = items
+	s.hover = ""
+	clear(s.rects)
+	s.W.SetToolTip("")
+	s.W.Update()
+}
+
 func (s *sidebar) select_(id string) {
 	if id == s.active {
 		return

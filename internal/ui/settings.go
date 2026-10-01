@@ -97,6 +97,7 @@ func newSettingsPage(a *App) *settingsPage {
 	p.section("Appearance")
 	p.themeCard()
 	p.accentCard()
+	p.layoutCard()
 	p.densityCard()
 	p.transparencyCard()
 	p.introCard()
@@ -581,6 +582,19 @@ func (p *settingsPage) accentCard() {
 	add(newSwatch(p, "custom", "Pick any colour…"))
 	sl.AddStretch()
 	c.block(sw)
+}
+
+// layoutCard switches between the Simple and Advanced layouts. It takes
+// effect at once: applyLayout rebuilds the sidebar and board in place.
+func (p *settingsPage) layoutCard() {
+	s := p.settings()
+	idx := max(0, slices.Index(config.LayoutChoices, s.Layout))
+	layout := dropdown([]string{"Simple", "Advanced"}, idx, func(i int) {
+		s.Layout = config.LayoutChoices[i]
+		p.save()
+		p.app.applyLayout()
+	})
+	p.card().head("board", "Layout", "Simple shows your agents as cards with just the essentials. Advanced adds tasks, fleets, analytics, the audit log, observed sessions and the full table.", layout.QWidget)
 }
 
 func (p *settingsPage) densityCard() {
