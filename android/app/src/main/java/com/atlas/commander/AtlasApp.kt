@@ -21,6 +21,14 @@ const val CHANNEL_APPROVALS = "approvals"
 fun unreachableText(name: String) =
 	"Can't reach $name. Is Commander running with phone access on, and are you on the same network?"
 
+/** The message for a failed call: a changed certificate gets its own advice. */
+fun failText(name: String, e: Exception) =
+	if (e is UnreachableException && e.pinMismatch) {
+		"$name answered with a different certificate than when you paired. If phone access was reset on the PC, pair again."
+	} else {
+		unreachableText(name)
+	}
+
 class AtlasApp : Application() {
 	lateinit var model: AppModel
 		private set
@@ -87,10 +95,8 @@ class AppModel(private val context: Context) {
 			error = null
 		} catch (e: ApiException) {
 			handle(e)
-		} catch (_: UnreachableException) {
-			error = unreachableText(pcName())
 		} catch (e: Exception) {
-			error = unreachableText(pcName())
+			error = failText(pcName(), e)
 		}
 	}
 
@@ -112,7 +118,7 @@ class AppModel(private val context: Context) {
 			} catch (e: ApiException) {
 				if (e.unauthorized) handle(e) else toast = e.message
 			} catch (e: Exception) {
-				toast = unreachableText(pcName())
+				toast = failText(pcName(), e)
 			}
 			refresh()
 		}
@@ -145,7 +151,7 @@ class AppModel(private val context: Context) {
 			} catch (e: ApiException) {
 				pairError = e.message
 			} catch (e: Exception) {
-				pairError = unreachableText(p.name)
+				pairError = failText(p.name, e)
 			} finally {
 				pairBusy = false
 			}

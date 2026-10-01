@@ -167,7 +167,7 @@ fun MainScreen(model: AppModel, setNotify: (Boolean) -> Unit, version: String) {
 						)
 						state?.let {
 							Text(
-								"Spent today ${usd(it.spent)}" + if (it.demo) " · demo" else "",
+								"Spent since start ${usd(it.spent)}" + if (it.demo) " · demo" else "",
 								style = MaterialTheme.typography.bodySmall,
 								color = MaterialTheme.colorScheme.onSurfaceVariant,
 							)

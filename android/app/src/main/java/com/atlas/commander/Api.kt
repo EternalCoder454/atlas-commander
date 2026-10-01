@@ -18,8 +18,14 @@ class ApiException(val status: Int, message: String) : Exception(message) {
 	val unauthorized get() = status == 401
 }
 
-/** No host answered at all. */
-class UnreachableException : IOException("unreachable")
+/**
+ * No host answered at all. [pinMismatch] is set when a host did answer but
+ * with a certificate other than the paired one, which needs different advice.
+ */
+class UnreachableException(val pinMismatch: Boolean = false) : IOException("unreachable")
+
+/** The paired certificate did not match; told apart from other TLS failures. */
+class PinMismatchException : CertificateException("certificate does not match the pairing")
 
 /**
  * Trusts exactly one certificate: the one whose SHA-256 is [pin]. The system
@@ -32,7 +38,7 @@ class PinTrustManager(private val pin: String) : X509TrustManager {
 
 	override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
 		val leaf = chain?.firstOrNull() ?: throw CertificateException("no certificate")
-		if (!Pin.matches(leaf.encoded, pin)) throw CertificateException("certificate does not match the pairing")
+		if (!Pin.matches(leaf.encoded, pin)) throw PinMismatchException()
 	}
 
 	override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -50,6 +56,7 @@ class ApiClient(private var pairing: Pairing, private val onHostWorked: (String)
 
 	private fun call(method: String, path: String, body: JSONObject? = null): JSONObject {
 		var lastError: IOException? = null
+		var pinMismatch = false
 		for (host in pairing.hostsToTry()) {
 			val c = try {
 				open(host, method, path)
@@ -83,11 +90,12 @@ class ApiClient(private var pairing: Pairing, private val onHostWorked: (String)
 				throw e
 			} catch (e: IOException) {
 				lastError = e
+				if (generateSequence<Throwable>(e) { it.cause }.any { it is PinMismatchException }) pinMismatch = true
 			} finally {
 				c.disconnect()
 			}
 		}
-		throw UnreachableException().also { if (lastError != null) it.initCause(lastError) }
+		throw UnreachableException(pinMismatch).also { if (lastError != null) it.initCause(lastError) }
 	}
 
 	private fun open(host: String, method: String, path: String): HttpsURLConnection {
