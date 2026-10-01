@@ -29,3 +29,28 @@ func Relaunch(binary string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	return cmd.Start()
 }
+
+// FindTerminal returns the first terminal emulator that is installed, or nil.
+// The dialog offers "Run in Terminal" only when there is one: a button that
+// silently does nothing is worse than no button.
+func FindTerminal() *Terminal {
+	for _, t := range terminals {
+		if which(t.cmd) != "" {
+			found := t
+			return &found
+		}
+	}
+	return nil
+}
+
+// Run opens the terminal on cmd. It is detached into its own session, so it
+// stays open if Commander quits, and reaped in the background.
+func (t Terminal) Run(cmd string) error {
+	c := exec.Command(t.cmd, t.argv(cmd)...)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := c.Start(); err != nil {
+		return err
+	}
+	go c.Wait()
+	return nil
+}

@@ -858,6 +858,12 @@ func (p *settingsPage) aboutCards() {
 
 	c := p.card()
 	c.head("folder", "Where Commander keeps things", "Select a path to copy it.")
+	// How this copy got here, which is also who updates it. Filled in when
+	// the background detection finishes.
+	u := p.app.updates
+	prog := c.sub("Program", u.where())
+	prog.sub.SetTextInteractionFlags(qt.TextSelectableByMouse)
+	u.render = append(u.render, func() { prog.setSub(u.where()) })
 	for _, r := range []struct{ title, path string }{
 		{"Settings", paths.Settings()},
 		{"Themes", paths.Themes()},

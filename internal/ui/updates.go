@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -35,6 +37,16 @@ type updateUI struct {
 	gen, inflight uint64
 	res           updateCheck
 
+	// The install as detected at start-up, for About. The check detects it
+	// again each time, since an update can change it.
+	detect   bgLoad[update.Install]
+	in       update.Install
+	detected bool
+
+	// The launch check opens the dialog by itself, once per run, when it
+	// finds an update. offerHeld keeps it back while the intro plays.
+	offerAtLaunch, offerHeld bool
+
 	pill   *qt.QPushButton
 	render []func() // redraw what shows the result, e.g. Settings' Updates card
 }
@@ -45,6 +57,54 @@ func newUpdateUI(a *App) *updateUI { return &updateUI{app: a} }
 // the user about unasked. A channel switch is theirs to ask for in Settings.
 func (u *updateUI) available() bool {
 	return u.checked && u.res.err == nil && u.res.info.Available && !u.res.info.Switch
+}
+
+// startDetect works out how this copy was installed, for About. It runs
+// package-manager queries, so it runs in the background.
+func (u *updateUI) startDetect() {
+	u.detect.start(0, func() (update.Install, error) { return update.Detect(), nil })
+}
+
+// startLaunchCheck is the check Commander runs as it opens. If it finds an
+// update, the dialog opens by itself, after the intro when held is set (see
+// releaseOffer). The pill in the header stays either way, for after "Update
+// later".
+func (u *updateUI) startLaunchCheck(held bool) {
+	u.offerAtLaunch, u.offerHeld = true, held
+	u.startCheck()
+}
+
+// releaseOffer lets the launch dialog open, once the intro has finished.
+func (u *updateUI) releaseOffer() {
+	u.offerHeld = false
+	u.maybeOffer()
+}
+
+// maybeOffer opens the dialog for the launch check's result, if that found an
+// update and nothing is in the way. It opens from a timer of its own rather
+// than here: this runs inside the tick, and a modal dialog's event loop inside
+// the tick would stop the tick for as long as the dialog is open.
+func (u *updateUI) maybeOffer() {
+	if !u.offerAtLaunch || u.offerHeld || !u.checked {
+		return
+	}
+	u.offerAtLaunch = false
+	if !u.available() {
+		return
+	}
+	t := qt.NewQTimer2(u.app.win.QObject)
+	t.SetSingleShot(true)
+	t.OnTimeout(func() {
+		t.DeleteLater()
+		// Not over another dialog, such as first-run setup or an approval,
+		// and not into a window that is hidden in the tray. The pill says it
+		// instead.
+		if qt.QApplication_ActiveModalWidget() != nil || !u.app.win.IsVisible() {
+			return
+		}
+		u.openDialog(true)
+	})
+	t.Start(0)
 }
 
 // startCheck asks the chosen channel what it has. Demo mode never goes to the
@@ -72,6 +132,10 @@ func (u *updateUI) startCheck() {
 
 // poll is called from the tick: it takes a finished check, if there is one.
 func (u *updateUI) poll() {
+	if in, _, ok := u.detect.take(0); ok {
+		u.in, u.detected = in, true
+		u.redraw()
+	}
 	if res, _, ok := u.load.take(u.gen); ok {
 		u.checking = false
 		u.deliver(res)
@@ -88,11 +152,15 @@ func (u *updateUI) poll() {
 func (u *updateUI) deliver(res updateCheck) {
 	u.res, u.checked = res, true
 	u.redraw()
+	u.maybeOffer()
 }
 
 // forget drops the last answer, after the channel changed and it no longer
 // describes what the user chose.
 func (u *updateUI) forget() {
+	// A channel change is the user at work in Settings; the answer for the new
+	// channel shows there, not as a launch dialog.
+	u.offerAtLaunch = false
 	u.gen++
 	u.checked = false
 	u.res = updateCheck{}
@@ -115,7 +183,7 @@ func (u *updateUI) addPill(l *qt.QHBoxLayout, at int) {
 	setProp(u.pill.QWidget, "accent", true)
 	u.pill.SetToolTip("A newer version of Atlas Commander is out")
 	u.pill.SetVisible(false)
-	u.pill.OnClicked(u.openDialog)
+	u.pill.OnClicked(func() { u.openDialog(false) })
 	l.InsertWidget(at, u.pill.QWidget)
 }
 
@@ -135,6 +203,23 @@ func (u *updateUI) status() string {
 		return "Version " + versionOr(u.res.info.Version, "newer than yours") + " is available"
 	}
 	return "Up to date"
+}
+
+// where is the About row saying how this copy got here, which is also who
+// updates it: "Installed by dnf" says more than a bare /usr/bin path.
+func (u *updateUI) where() string {
+	in := u.in
+	switch {
+	case !u.detected:
+		return "Finding out…"
+	case in.Kind == update.FromSource:
+		return "Built from " + shortPath(in.Source)
+	case in.Kind == update.FromPackage:
+		return "Installed by " + in.Manager + " · " + in.Binary
+	case in.Binary == "":
+		return "Unknown"
+	}
+	return shortPath(in.Binary)
 }
 
 func versionOr(v, fallback string) string {
@@ -172,7 +257,7 @@ func (p *settingsPage) updateCards() {
 	}
 	btn.OnClicked(func() {
 		if u.checked && u.res.err == nil && u.res.info.Available {
-			u.openDialog()
+			u.openDialog(false)
 		} else {
 			u.startCheck()
 		}
@@ -205,8 +290,10 @@ func (p *settingsPage) updateCards() {
 }
 
 // openDialog shows what can be done about the update the last check found,
-// which depends on how this copy was installed.
-func (u *updateUI) openDialog() {
+// which depends on how this copy was installed. atLaunch is set when the launch
+// check opened it rather than a click: it then announces the update and its
+// close button puts it off.
+func (u *updateUI) openDialog(atLaunch bool) {
 	a, in, info := u.app, u.res.in, u.res.info
 	channel := a.settings.UpdateChannel
 
@@ -231,6 +318,12 @@ func (u *updateUI) openDialog() {
 	if !in.SelfUpdatable() {
 		heading, _ = update.Wording(in)
 	}
+	if atLaunch {
+		heading = "Update found"
+		if info.Version != "" {
+			heading += " — v" + info.Version
+		}
+	}
 	h := qt.NewQLabel3(heading)
 	setProp(h.QWidget, "title", true)
 	col.AddWidget(h.QWidget)
@@ -243,10 +336,18 @@ func (u *updateUI) openDialog() {
 	buttons := qt.NewQHBoxLayout2()
 	buttons.AddStretch()
 	closeBtn := qt.NewQPushButton3("Close")
+	if atLaunch {
+		closeBtn.SetText("Update later")
+	}
 	closeBtn.OnClicked(dlg.Reject)
 
 	switch {
 	case in.SelfUpdatable():
+		if in.Kind == update.Standalone {
+			col.AddWidget(wrapCaption("This copy came from a release download. The first update fetches " +
+				"Commander's source and builds it, which needs Go, a C++ compiler and the Qt 6 " +
+				"development files. Later updates are quicker.").QWidget)
+		}
 		u.selfUpdateBody(dlg, col, buttons, closeBtn, in, channel)
 	case in.Kind == update.FromPackage:
 		_, explain := update.Wording(in)
@@ -261,8 +362,26 @@ func (u *updateUI) openDialog() {
 			qt.QGuiApplication_Clipboard().SetText(cmd)
 			cp.SetText("Copied")
 		})
-		setProp(cp.QWidget, "accent", true)
 		buttons.AddWidget(cp.QWidget)
+		// In a terminal the package manager asks for the password itself,
+		// which is where a password prompt belongs. Offered only when there is
+		// a terminal to run it in.
+		if term := update.FindTerminal(); term != nil && cmd != "" {
+			run := qt.NewQPushButton3("Run in Terminal")
+			run.SetToolTip("Opens " + term.Name() + " on this command")
+			setProp(run.QWidget, "accent", true)
+			run.OnClicked(func() {
+				if err := term.Run(cmd); err != nil {
+					run.SetText("Couldn't open a terminal")
+					run.SetEnabled(false)
+					return
+				}
+				dlg.Accept()
+			})
+			buttons.AddWidget(run.QWidget)
+		} else {
+			setProp(cp.QWidget, "accent", true)
+		}
 		col.AddWidget(wrapCaption("Commander uses the new version the next time you start it.").QWidget)
 	default:
 		_, explain := update.Wording(in)
@@ -283,7 +402,19 @@ func (u *updateUI) openDialog() {
 	}
 	buttons.AddWidget(closeBtn.QWidget)
 	col.AddLayout(buttons.QLayout)
+	fitDialog(dlg, col)
 	dlg.Exec()
+}
+
+// fitDialog grows a dialog to the height its layout needs at its width.
+// Wrapped labels only know their height for a given width, and a top-level
+// dialog does not ask: sized to (520, 0) it squeezed the "What's new" list
+// until lines were cut off. Called again whenever the text in it changes, and
+// it only grows, so a dialog the user made bigger stays that way.
+func fitDialog(dlg *qt.QDialog, col *qt.QVBoxLayout) {
+	if h := col.TotalHeightForWidth(dlg.Width()); h > dlg.Height() {
+		dlg.Resize(dlg.Width(), h)
+	}
 }
 
 // selfUpdateBody is the dialog for a source install: an Update button that runs
@@ -325,6 +456,15 @@ func (u *updateUI) selfUpdateBody(dlg *qt.QDialog, col *qt.QVBoxLayout, buttons 
 
 	var run bgLoad[error]
 	running := false
+	// What the update is doing, written by its goroutine and shown by poll:
+	// a standalone copy fetches the source before it builds.
+	var stageMu sync.Mutex
+	stage, shown := "", ""
+	say := func(text string) {
+		stageMu.Lock()
+		stage = text
+		stageMu.Unlock()
+	}
 	// A running build must not be cut off by Esc or the window's close button:
 	// half an install is worse than a slow one.
 	dlg.OnReject(func(super func()) {
@@ -352,11 +492,13 @@ func (u *updateUI) selfUpdateBody(dlg *qt.QDialog, col *qt.QVBoxLayout, buttons 
 			t.OnTimeout(func() {
 				if in.Binary == "" {
 					status.SetText("Updated. Start Commander again to use the new version.")
+					fitDialog(dlg, col)
 					closeBtn.SetEnabled(true)
 					return
 				}
 				if rerr := update.Relaunch(in.Binary); rerr != nil {
 					status.SetText("Updated, but Commander couldn't restart itself. Start it again to use the new version.")
+					fitDialog(dlg, col)
 					closeBtn.SetEnabled(true)
 					return
 				}
@@ -364,6 +506,17 @@ func (u *updateUI) selfUpdateBody(dlg *qt.QDialog, col *qt.QVBoxLayout, buttons 
 				a.Quit()
 			})
 			t.Start(900)
+			return
+		}
+		var setup *update.SetupError
+		if errors.As(err, &setup) {
+			// Something to install first, named with the command that does it.
+			// Not a build failure, and there is no log worth showing.
+			status.SetText(err.Error())
+			status.SetTextInteractionFlags(qt.TextSelectableByMouse)
+			start.SetText("Try again")
+			start.SetEnabled(true)
+			fitDialog(dlg, col)
 			return
 		}
 		if err == update.ErrNotUpdated {
@@ -376,10 +529,19 @@ func (u *updateUI) selfUpdateBody(dlg *qt.QDialog, col *qt.QVBoxLayout, buttons 
 		copyLog.SetVisible(true)
 		start.SetText("Try again")
 		start.SetEnabled(true)
+		fitDialog(dlg, col)
 	}
 
 	poll := qt.NewQTimer2(dlg.QObject)
 	poll.OnTimeout(func() {
+		stageMu.Lock()
+		text := stage
+		stageMu.Unlock()
+		if text != shown {
+			shown = text
+			status.SetText(text)
+			fitDialog(dlg, col)
+		}
 		if err, _, ok := run.take(2); ok {
 			poll.Stop()
 			finish(err)
@@ -397,10 +559,26 @@ func (u *updateUI) selfUpdateBody(dlg *qt.QDialog, col *qt.QVBoxLayout, buttons 
 		copyLog.SetVisible(false)
 		details.SetVisible(false)
 		toggle.SetChecked(false)
-		status.SetText("Updating… this rebuilds Commander and can take a few minutes. Keep this window open.")
+		shown = "" // the last run's failure is on the label now, whatever stage says
+		building := "Updating… this rebuilds Commander and can take a few minutes. Keep this window open."
+		say(building)
+		status.SetText(building)
 		status.SetVisible(true)
 		bar.SetVisible(true)
-		run.start(2, func() (error, error) { return update.Run(in, channel), nil })
+		fitDialog(dlg, col)
+		run.start(2, func() (error, error) {
+			in := in
+			if in.Kind == update.Standalone {
+				say("Checking what the build needs…")
+				fetched, err := update.Bootstrap(in, channel, say)
+				if err != nil {
+					return err, nil
+				}
+				in = fetched
+				say(building)
+			}
+			return update.Run(in, channel), nil
+		})
 		poll.Start(int(tickInterval.Milliseconds()))
 	})
 }

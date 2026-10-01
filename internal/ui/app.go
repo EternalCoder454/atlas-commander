@@ -150,11 +150,12 @@ func (a *App) Run() int {
 	// picks the page, which is a development capture.
 	var in *intro
 	if a.settings.ShowIntro && qtx.AnimationsEnabled() && os.Getenv("ATLAS_VIEW") == "" {
-		in = newIntro(a, "Commander", nil)
+		in = newIntro(a, "Commander", a.updates.releaseOffer)
 	}
 	a.win.Show()
+	a.updates.startDetect()
 	if a.settings.UpdateCheck {
-		a.updates.startCheck()
+		a.updates.startLaunchCheck(in != nil)
 	}
 	if in != nil {
 		in.begin()

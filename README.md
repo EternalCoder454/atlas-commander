@@ -97,16 +97,26 @@ cap can't be enforced on them until you add the model to `prices.json` (see
 
 Settings has an Updates section: it shows whether your channel (Release or Beta)
 has something newer, and Commander checks once when it opens unless you turn
-that off. A small "Update available" button appears in the header when there is
-an update. What it does next depends on how you installed:
+that off. When that check finds an update, Commander says so once with what's
+new, and a small "Update available" button stays in the header if you choose
+"Update later". Settings, About, says how your copy was installed. What an
+update does depends on that:
 
 - **Built from source** (`setup.sh`, `make install` or `just install`): it pulls
   the channel, rebuilds, reinstalls and restarts. `scripts/update.sh` does the
   work and never touches a checkout with uncommitted changes. Its log is in
   `~/.local/state/atlas-commander/update.log`.
-- **Installed by a package manager**: it shows the command to run.
-- **Release tarball or Windows zip**: it opens the releases page. Windows can't
-  replace a program that is running.
+- **Installed by a package manager**: it shows the command to run, with a button
+  that runs it in a terminal so the package manager can ask for your password.
+- **Linux release tarball installed with `install.sh`**: the first update
+  downloads the source into `~/.local/share/atlas-commander/src` and builds it,
+  and from then on it updates like a build from source. That needs Go, a C++
+  compiler, pkg-config, make and the Qt 6 development files; if any are missing
+  it names them and the command that installs them. Installed system-wide with
+  `--system`, or run straight from the unpacked folder, it opens the releases
+  page instead.
+- **Windows zip**: it opens the releases page. Windows can't replace a program
+  that is running.
 
 ## Phone
 
