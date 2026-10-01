@@ -3,6 +3,8 @@
 Written for the people who use Atlas Commander rather than the people who build
 it. One short line per change, no jargon — this is what the update prompt shows.
 
+## 0.1.1-beta
+
 ## 0.1.0
 
 - First beta: run a fleet of Claude agents and watch them all from one window
