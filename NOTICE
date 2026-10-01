@@ -70,3 +70,12 @@ modernc.org/libc runtime, under the same BSD 3-Clause License.
 The module dependencies that the driver brings in each carry their own
 permissive licence (MIT, BSD or Apache 2.0); their notices are in their module
 sources, which `go mod download` fetches.
+
+--------------------------------------------------------------------------------
+rsc.io/qr
+--------------------------------------------------------------------------------
+
+The QR code encoder, rsc.io/qr, used under the BSD 3-Clause License. It draws
+the pairing code in Settings, Phone.
+
+    Copyright (c) 2009 The Go Authors. All rights reserved.

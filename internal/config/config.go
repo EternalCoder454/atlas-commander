@@ -84,7 +84,18 @@ type Settings struct {
 	GeminiKeyEnv string `json:"gemini_key_env"`
 	OllamaURL    string `json:"ollama_url"`
 	DefaultFleet string `json:"default_fleet"`
+	// PhoneAccess lets the Android app connect over HTTPS. It is off until
+	// the user turns it on, because it opens a port on every interface.
+	PhoneAccess bool `json:"phone_access"`
+	PhonePort   int  `json:"phone_port"`
 }
+
+// Phone port limits. 47821 is unassigned and above the privileged range.
+const (
+	DefaultPhonePort = 47821
+	MinPhonePort     = 1024
+	MaxPhonePort     = 65535
+)
 
 // Defaults is what a fresh install uses.
 func Defaults() Settings {
@@ -103,6 +114,7 @@ func Defaults() Settings {
 		GeminiKeyEnv:  "GEMINI_API_KEY",
 		OllamaURL:     "http://127.0.0.1:11434",
 		UpdateCheck:   true,
+		PhonePort:     DefaultPhonePort,
 	}
 }
 
@@ -154,6 +166,15 @@ func NormalizeFontSize(v int) int {
 	return min(max(v, MinFontPt), MaxFontPt)
 }
 
+// NormalizePhonePort clamps to MinPhonePort..MaxPhonePort; 0 (unset) gives the
+// default.
+func NormalizePhonePort(v int) int {
+	if v == 0 {
+		return DefaultPhonePort
+	}
+	return min(max(v, MinPhonePort), MaxPhonePort)
+}
+
 // Normalize fixes every field that has a rule. It never fails.
 func (s *Settings) Normalize() {
 	d := Defaults()
@@ -178,6 +199,7 @@ func (s *Settings) Normalize() {
 		s.GeminiKeyEnv = d.GeminiKeyEnv
 	}
 	s.OllamaURL = NormalizeOllamaURL(s.OllamaURL)
+	s.PhonePort = NormalizePhonePort(s.PhonePort)
 }
 
 // NormalizeOllamaURL trims the address, adds http:// when no scheme was typed

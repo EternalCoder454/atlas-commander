@@ -236,3 +236,25 @@ func TestLoadIgnoresOldAPIKeyFieldAndDefaultsProviders(t *testing.T) {
 		t.Errorf("got ollama url %q, want http://localhost:11434", s.OllamaURL)
 	}
 }
+
+// Phone access opens a port, so it must be off for a fresh install, and a
+// hand-edited port must land somewhere the app can listen.
+func TestPhoneAccessDefaultsOffAndPortIsClamped(t *testing.T) {
+	d := Defaults()
+	if d.PhoneAccess || d.PhonePort != 47821 {
+		t.Errorf("defaults: got access %v port %d, want false 47821", d.PhoneAccess, d.PhonePort)
+	}
+	for in, want := range map[int]int{0: 47821, -5: 1024, 80: 1024, 1024: 1024, 50000: 50000, 70000: 65535} {
+		if got := NormalizePhonePort(in); got != want {
+			t.Errorf("port %d: got %d, want %d", in, got, want)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"phone_access":true,"phone_port":22}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil || !s.PhoneAccess || s.PhonePort != 1024 {
+		t.Errorf("load: got %v %d %v, want true 1024 nil", s.PhoneAccess, s.PhonePort, err)
+	}
+}
