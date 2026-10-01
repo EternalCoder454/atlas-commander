@@ -217,7 +217,13 @@ func (a *App) paintPage(w *qt.QWidget) {
 	path.LineTo(ptf(0, r))
 	path.ArcTo(rectf(0, 0, 2*r, 2*r), 180, -90)
 	path.LineTo(ptf(fw, 0))
-	path.LineTo(ptf(fw, fh))
+	if cr := a.corner(); cr > 0 {
+		// The window's bottom-right corner is round; the sheet follows it.
+		path.LineTo(ptf(fw, fh-cr))
+		path.ArcTo(rectf(fw-2*cr, fh-2*cr, 2*cr, 2*cr), 0, -90)
+	} else {
+		path.LineTo(ptf(fw, fh))
+	}
 	path.CloseSubpath()
 	pc := p.page.q(a.glass.Page)
 	defer pc.Delete()

@@ -121,7 +121,7 @@ func newAnalyticsPage(a *App) *analyticsPage {
 	for i, r := range timeRanges {
 		labels[i] = r.label
 	}
-	top.AddWidget(segmented(labels, p.rangeIdx, func(i int) { p.rangeIdx = i; p.invalidate() }))
+	top.AddWidget(dropdown(labels, p.rangeIdx, func(i int) { p.rangeIdx = i; p.invalidate() }).QWidget)
 	l.AddLayout(top.QLayout)
 
 	p.err = caption("")
@@ -152,14 +152,14 @@ func newAnalyticsPage(a *App) *analyticsPage {
 	l.AddLayout(charts.QLayout)
 
 	tabs := qt.NewQHBoxLayout2()
-	tabs.AddWidget(segmented([]string{"By agent", "By session"}, 0, func(i int) {
+	tabs.AddWidget(dropdown([]string{"By agent", "By session"}, 0, func(i int) {
 		p.byAgent = i == 0
 		if p.byAgent {
 			p.tables.SetCurrentWidget(p.agentList.W.QWidget)
 		} else {
 			p.tables.SetCurrentWidget(p.sessList.W.QWidget)
 		}
-	}))
+	}).QWidget)
 	tabs.AddStretch()
 	l.AddLayout(tabs.QLayout)
 

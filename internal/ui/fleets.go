@@ -611,7 +611,7 @@ func (a *App) editAgent(id, fleetID string) {
 		labels[i] = p.label
 	}
 	backend := segmentedValue(labels, providerIndex(orig.Backend))
-	form.AddRow3("Runs on", backend.w)
+	form.AddRow3("Runs on", backend.w.QWidget)
 	backendNote := caption("")
 	backendNote.SetWordWrap(true)
 	form.AddRowWithWidget(backendNote.QWidget)
@@ -831,16 +831,16 @@ func (a *App) editAgent(id, fleetID string) {
 	dlg.Exec()
 }
 
-// segValue is a segmented control that remembers its choice.
+// segValue is a dropdown that remembers its choice.
 type segValue struct {
-	w   *qt.QWidget
+	w   *qt.QComboBox
 	sel int
 	on  func(int)
 }
 
 func segmentedValue(labels []string, sel int) *segValue {
 	s := &segValue{sel: sel}
-	s.w = segmented(labels, sel, func(i int) {
+	s.w = dropdown(labels, sel, func(i int) {
 		s.sel = i
 		if s.on != nil {
 			s.on(i)

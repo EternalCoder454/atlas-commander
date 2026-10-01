@@ -54,20 +54,11 @@ func newDetailPage(a *App) *detailPage {
 	l := newPageLayout(d.w)
 
 	nav := qt.NewQHBoxLayout2()
-	back := qt.NewQPushButton3("← Board")
+	back := a.commandButton("Board", "back", "Back to the board")
 	back.OnClicked(func() { a.side.active = ""; a.side.select_("board") })
 	nav.AddWidget(back.QWidget)
 	nav.AddStretch()
-	d.btn.hold = qt.NewQPushButton3("Hold")
-	d.btn.hold.SetToolTip("Stop the agent at its next tool call")
-	d.btn.hold.OnClicked(func() { a.report(a.ctl.Hold(d.id)) })
-	d.btn.resume = qt.NewQPushButton3("Resume")
-	d.btn.resume.OnClicked(func() { a.report(a.ctl.Resume(d.id)) })
-	d.btn.stop = qt.NewQPushButton3("Stop")
-	d.btn.stop.OnClicked(func() { a.report(a.ctl.Stop(d.id)) })
-	d.btn.kill = qt.NewQPushButton3("Kill")
-	setProp(d.btn.kill.QWidget, "danger", true)
-	d.btn.kill.OnClicked(func() { a.report(a.ctl.Kill(d.id)) })
+	d.btn.hold, d.btn.resume, d.btn.stop, d.btn.kill = a.agentControls(func() string { return d.id })
 	for _, b := range []*qt.QPushButton{d.btn.hold, d.btn.resume, d.btn.stop, d.btn.kill} {
 		nav.AddWidget(b.QWidget)
 	}
