@@ -223,6 +223,7 @@ func newBoardPage(a *App) *boardPage {
 	a.themed = append(a.themed, b.themeChanged)
 	b.themeChanged()
 	b.updateButtons()
+	b.startPulse()
 	return b
 }
 
@@ -507,6 +508,7 @@ func (b *boardPage) paintCell(p *qt.QPainter, opt *qt.QStyleOptionViewItem, idx 
 		case fleet.ToneError:
 			dot = pal.err
 		}
+		b.paintHalo(p, a.Status, dot, float64(tx)+6, float64(y)+float64(h)/2, [4]int{x, y, w, h})
 		dc := dot.q(1)
 		br := qt.NewQBrush3(dc)
 		p.SetRenderHint(qt.QPainter__Antialiasing)
