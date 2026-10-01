@@ -416,11 +416,11 @@ func (a *App) buildHeader() *qt.QWidget {
 	ver := qt.NewQLabel3("v" + strings.TrimSuffix(a.version, "\n"))
 	ver.SetProperty("caption", qt.NewQVariant8(true))
 	l.AddWidget(ver.QWidget)
-	a.updates.addPill(l)
 	l.AddStretch()
 
 	// The "Update available" button goes in here, before the spend label.
 	a.header.updateAt = l.Count()
+	a.updates.addPill(l, a.header.updateAt)
 
 	a.header.spend = newLiveLabel("")
 	a.header.spend.L.SetProperty("mono", qt.NewQVariant8(true))

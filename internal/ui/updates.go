@@ -97,13 +97,13 @@ func (u *updateUI) redraw() {
 
 // addPill puts the small "Update available" button in the header. It is hidden
 // until a check finds something, and opens the update dialog.
-func (u *updateUI) addPill(l *qt.QHBoxLayout) {
+func (u *updateUI) addPill(l *qt.QHBoxLayout, at int) {
 	u.pill = qt.NewQPushButton3("Update available")
 	setProp(u.pill.QWidget, "accent", true)
 	u.pill.SetToolTip("A newer version of Atlas Commander is out")
 	u.pill.SetVisible(false)
 	u.pill.OnClicked(u.openDialog)
-	l.AddWidget(u.pill.QWidget)
+	l.InsertWidget(at, u.pill.QWidget)
 }
 
 // status is the sentence under the version on Settings.
@@ -171,13 +171,13 @@ func (p *settingsPage) updateCards() {
 	if s.UpdateChannel == update.ChannelBeta {
 		sel = 1
 	}
-	seg := segmented(labels, sel, func(i int) {
+	seg := dropdown(labels, sel, func(i int) {
 		s.UpdateChannel = []string{update.ChannelRelease, update.ChannelBeta}[i]
 		p.save()
 		u.forget()
 		u.startCheck()
 	})
-	c.sub("Channel", "Release is the stable version. Beta gets new features and fixes first, and may be rougher.", seg)
+	c.sub("Channel", "Release is the stable version. Beta gets new features and fixes first, and may be rougher.", seg.QWidget)
 
 	atLaunch := newToggle(a, s.UpdateCheck, func(on bool) {
 		s.UpdateCheck = on
