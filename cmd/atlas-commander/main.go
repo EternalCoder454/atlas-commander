@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -32,6 +33,7 @@ import (
 	"atlas-commander/internal/paths"
 	"atlas-commander/internal/pricing"
 	"atlas-commander/internal/procgroup"
+	"atlas-commander/internal/remote"
 	"atlas-commander/internal/store"
 	"atlas-commander/internal/ui"
 )
@@ -39,6 +41,35 @@ import (
 // hookTimeout bounds one approval wait inside Claude Code. A person may be
 // away from the desk, so it is long; the gate itself never times out.
 const hookTimeout = 24 * time.Hour
+
+// Both controllers must be usable from the phone server's HTTP goroutines.
+// They are: each guards its state with a mutex and never touches Qt.
+var (
+	_ remote.Controller = (*fleet.Supervisor)(nil)
+	_ remote.Controller = (*demo.Fleet)(nil)
+)
+
+// startPhone makes the phone access server for ctl and starts it when the
+// setting is on. The settings page then turns it on and off live through the
+// returned host. The caller stops it with Disable on the way out.
+func startPhone(ctl remote.Controller, settings config.Settings, demoMode bool) *remote.Host {
+	name, _ := os.Hostname()
+	if name == "" {
+		name = "Atlas Commander PC"
+	}
+	h := remote.NewHost(remote.Options{
+		Controller: ctl,
+		Dir:        filepath.Join(paths.Data(), "phone"),
+		Name:       name,
+		Version:    strings.TrimSpace(atlascommander.Version()),
+		Demo:       demoMode,
+	})
+	if settings.PhoneAccess {
+		h.Enable(settings.PhonePort)
+	}
+	ui.SetPhone(h)
+	return h
+}
 
 func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -55,10 +86,12 @@ func main() {
 	}
 	if *demoMode {
 		d := demo.New()
+		phoneHost := startPhone(d, settings, true)
 		app := ui.New(ui.Options{Controller: d, Version: atlascommander.Version(), Settings: settings, Demo: true})
 		stop := quitOnSignal(app)
 		code := app.Run()
 		stop()
+		phoneHost.Disable()
 		d.Close() // os.Exit skips defers
 		os.Exit(code)
 	}
@@ -143,6 +176,9 @@ func run(settings config.Settings) int {
 	defer closeGate() // runs before s.Close: defers are last in, first out
 	s.Attach(srv)
 	sup.Store(s)
+
+	phoneHost := startPhone(s, settings, false)
+	defer phoneHost.Disable() // runs before s.Close, so no request reaches a closed supervisor
 
 	app := ui.New(ui.Options{Controller: s, Version: atlascommander.Version(), Settings: settings})
 	srv.SetOnActivate(app.Raise)

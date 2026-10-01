@@ -17,3 +17,4 @@ it. One short line per change, no jargon — this is what the update prompt show
 - The Claude API provider is gone; agents that used it need another provider chosen
 - Updates: Commander checks for a newer version when it opens and can update itself when built from source
 - Settings has an Updates section to check now, pick the Release or Beta channel, or turn the check off
+- Phone access, off until you turn it on in Settings: watch your agents and answer approvals from your phone

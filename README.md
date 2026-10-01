@@ -108,6 +108,23 @@ an update. What it does next depends on how you installed:
 - **Release tarball or Windows zip**: it opens the releases page. Windows can't
   replace a program that is running.
 
+## Phone
+
+Commander can be watched and steered from the Atlas Commander app on an Android
+phone: see every agent, read what it is doing, and allow or deny approvals. The
+agents keep running on your PC, so Commander has to be open there.
+
+It is **off by default**. To pair, turn on Settings, Phone, Allow phone access,
+then scan the QR code in the Atlas Commander app (or copy the link into it). The
+phone and the PC must reach each other over the same network, or over Tailscale.
+The connection is HTTPS with a certificate only your phone trusts, and every
+request carries a secret token. "Forget paired phones" makes a new token.
+
+If your phone can't connect, your firewall may be blocking the port (47821 unless
+you changed it). On Fedora:
+`sudo firewall-cmd --add-port=47821/tcp --permanent && sudo firewall-cmd --reload`.
+The protocol is written down in [docs/phone-api.md](docs/phone-api.md).
+
 ## How approvals work
 
 Commander starts Claude Code headless and registers `atlas-hook` as its

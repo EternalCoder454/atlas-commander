@@ -51,6 +51,8 @@ type settingsPage struct {
 	// flush applies text typed but not yet confirmed; leaving the page
 	// runs it, as leaving the field would have.
 	flush []func()
+
+	phone *phoneCards // nil without a phone server
 }
 
 // A card's first row has its icon settingIconStart in from the card's edge
@@ -118,6 +120,8 @@ func newSettingsPage(a *App) *settingsPage {
 	p.section("Providers")
 	p.claudeCards()
 
+	p.phoneSection()
+
 	p.section("Updates")
 	p.updateCards()
 
@@ -146,6 +150,7 @@ func (p *settingsPage) currentID() string          { return p.app.settings.Theme
 // the answer is cached and refreshed in the background, so a fix made in a
 // terminal shows here a few seconds later.
 func (p *settingsPage) refresh(_ *fleet.Snapshot) {
+	p.phoneRefresh()
 	if time.Since(p.lastSetup) >= 3*time.Second {
 		p.checkSetup()
 	}
