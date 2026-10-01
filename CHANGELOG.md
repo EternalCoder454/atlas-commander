@@ -3,6 +3,8 @@
 Written for the people who use Atlas Commander rather than the people who build
 it. One short line per change, no jargon — this is what the update prompt shows.
 
+## 0.1.2-beta
+
 ## 0.1.1
 
 - A Simple layout for new commanders: your agents as cards, with Approvals and Settings; switch to Advanced in Settings
