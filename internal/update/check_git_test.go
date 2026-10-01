@@ -50,6 +50,7 @@ func TestCheckGitLeavesOtherBranchAlone(t *testing.T) {
 // is old. The check must go by the commit that was built, or it would say
 // "up to date" about a copy that is not.
 func TestCheckGitComparesInstalledCommitNotHead(t *testing.T) {
+	officialOrigin(t)
 	work, atFirst := behindCheckout(t)
 	gitRun(t, work, "pull", "--ff-only", "origin", "release") // HEAD is now current
 

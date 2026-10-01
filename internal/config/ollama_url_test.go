@@ -22,3 +22,11 @@ func TestNormalizeOllamaURLAcceptsHandTypedForms(t *testing.T) {
 		}
 	}
 }
+
+// A host that happens to be called v1 is a host, not the API path, and must
+// survive normalising.
+func TestNormalizeOllamaURLKeepsAHostNamedV1(t *testing.T) {
+	if got, want := NormalizeOllamaURL("http://v1"), "http://v1"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

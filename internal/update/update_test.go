@@ -136,6 +136,7 @@ func gitRun(t *testing.T, dir string, args ...string) {
 // A source install compares commits, which needs no network: the "origin" here
 // is a local bare repository.
 func TestCheckGitSeesNewCommits(t *testing.T) {
+	officialOrigin(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("no git")
 	}
@@ -216,7 +217,9 @@ func TestDetectRecognisesRecordedCheckout(t *testing.T) {
 // A binary a package manager owns must be left to it: replacing its files
 // would corrupt the package database.
 func TestDetectRecognisesPackageOwner(t *testing.T) {
-	owner := func(path string) (string, string, bool) { return "dnf", "atlas-commander", path == "/usr/bin/atlas-commander" }
+	owner := func(path string) (string, string, bool) {
+		return "dnf", "atlas-commander", path == "/usr/bin/atlas-commander"
+	}
 	in := detect(filepath.Join(t.TempDir(), "none"), "/usr/bin/atlas-commander", owner)
 	if in.Kind != FromPackage || in.Manager != "dnf" || in.Package != "atlas-commander" {
 		t.Errorf("got %+v, want a dnf package", in)
@@ -301,4 +304,32 @@ func TestRunMapsScriptExitCodes(t *testing.T) {
 	if err := Run(Install{Kind: Standalone}, ChannelRelease); err == nil {
 		t.Error("a standalone install: got nil, want an error")
 	}
+}
+
+// The update check and scripts/update.sh must agree on which origins are the
+// real repository; otherwise the header offers updates the script refuses.
+func TestOfficialOriginMatchesTheScriptsList(t *testing.T) {
+	for url, want := range map[string]bool{
+		"https://github.com/EternalCoder454/atlas-commander":       true,
+		"https://github.com/EternalCoder454/atlas-commander.git":   true,
+		"https://github.com/EternalCoder454/atlas-commander/":      true,
+		"ssh://git@github.com/EternalCoder454/atlas-commander.git": true,
+		"git@github.com:EternalCoder454/atlas-commander.git":       true,
+		"git@github.com:someone/atlas-commander.git":               false,
+		"https://github.com/EternalCoder454/atlas-commander-fork":  false,
+		"/tmp/origin.git": false,
+		"":                false,
+	} {
+		if got := OfficialOrigin(url); got != want {
+			t.Errorf("OfficialOrigin(%q): got %v, want %v", url, got, want)
+		}
+	}
+}
+
+// officialOrigin makes the update check see the real repository's URL for the
+// test's local origin, which it would otherwise refuse.
+func officialOrigin(t *testing.T) {
+	old := originURL
+	originURL = func(string) string { return RepoURL }
+	t.Cleanup(func() { originURL = old })
 }

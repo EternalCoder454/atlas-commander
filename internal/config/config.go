@@ -201,7 +201,8 @@ func NormalizeOllamaURL(v string) string {
 	default:
 		return Defaults().OllamaURL
 	}
-	if strings.HasSuffix(strings.ToLower(v), "/v1") {
+	// Only a path ending in /v1 is stripped; in "http://v1" the v1 is the host.
+	if strings.HasSuffix(strings.ToLower(v), "/v1") && strings.Contains(v[strings.Index(v, "://")+3:], "/") {
 		v = strings.TrimRight(v[:len(v)-len("/v1")], "/")
 	}
 	return v

@@ -71,6 +71,13 @@ func checkGit(src, channel, installed string) (Info, error) {
 		info.Summary = "Your checkout is on another branch"
 		return info, nil
 	}
+	if !OfficialOrigin(originURL(src)) {
+		// The updater refuses to build from any other origin (scripts/update.sh
+		// checks the same list); offering an update it will refuse would only
+		// end in a failed update.
+		info.Summary = "Your checkout's origin isn't the Atlas Commander repository"
+		return info, nil
+	}
 	if _, err := git(src, "fetch", "--quiet", "origin", channel); err != nil {
 		return info, ErrOffline
 	}
@@ -165,4 +172,27 @@ func fetchText(url string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// originURL is the checkout's origin. A variable so tests, whose origin is a
+// local bare repository, can stand in the real repository's URL.
+var originURL = func(src string) string {
+	u, _ := git(src, "remote", "get-url", "origin")
+	return u
+}
+
+// OfficialOrigin says whether a git remote URL is the Atlas Commander
+// repository on GitHub. It accepts the same forms scripts/update.sh does:
+// HTTPS, ssh:// and scp-style, with or without ".git".
+func OfficialOrigin(url string) bool {
+	const path = "EternalCoder454/atlas-commander"
+	for _, prefix := range []string{"https://github.com/", "ssh://git@github.com/", "git@github.com:"} {
+		rest, ok := strings.CutPrefix(url, prefix)
+		if !ok {
+			continue
+		}
+		rest = strings.TrimSuffix(strings.TrimSuffix(rest, "/"), ".git")
+		return rest == path
+	}
+	return false
 }
