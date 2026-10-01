@@ -56,6 +56,6 @@ func (b *setupBanner) refresh() {
 		return
 	}
 	b.problem = p
-	b.text.SetText(p + " Agents on the Claude API backend still work.")
+	b.text.SetText(p + " Agents using OpenAI, Gemini or Local still work.")
 	b.W.SetVisible(p != "")
 }

@@ -8,11 +8,13 @@ import (
 	"atlas-commander/internal/fleet"
 )
 
-// providerReady says whether step one of the guide is done. It is the only
-// place that reads SetupInfo for that, so the test changes in one spot when
-// more providers arrive.
+// providerReady says whether step one of the guide is done: any one provider
+// that can run an agent is enough. It is the only place that reads SetupInfo
+// for that, so a new provider changes one spot.
 func providerReady(info fleet.SetupInfo) bool {
-	return info.ClaudePath != "" && len(info.Problems) == 0
+	claude := info.ClaudePath != "" && len(info.Problems) == 0
+	local := info.OllamaReachable && info.OllamaModels > 0
+	return claude || info.OpenAIKeySet || info.GeminiKeySet || local
 }
 
 // guideStep is one numbered row of the Get started card.
@@ -51,7 +53,7 @@ func newStartGuide(a *App) *startGuide {
 	cl.AddSpacing(10)
 
 	defs := []struct{ title, sub, btn string }{
-		{"Check a provider", "Commander runs agents through Claude Code, so it needs to be installed and signed in.", "Open Settings"},
+		{"Check a provider", "Agents run through Claude Code, OpenAI, Gemini or a Local model. One of them needs to be set up.", "Open Settings"},
 		{"Create a fleet", "A fleet is a project folder your agents work in, with an optional budget.", "New fleet"},
 		{"Add an agent and give it a job", "An agent has a name, a model and instructions. Start it with a prompt from the Board.", "New agent"},
 	}
