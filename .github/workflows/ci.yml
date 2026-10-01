@@ -1,9 +1,13 @@
 name: CI
 
+# Pushes that only touch documentation skip CI: nothing they change is built or
+# tested. CHANGELOG.md is the exception, since a test checks it against VERSION.
 on:
   push:
     branches: [release, beta]
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
   pull_request:
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
   workflow_dispatch:
 
 permissions:
@@ -63,18 +67,25 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Record toolchain versions
+        id: toolchain
         run: |
           go version
           echo "qt6  $(pkg-config --modversion Qt6Widgets)"
+          echo "key=$(go env GOVERSION)-gcc$(gcc -dumpversion)-qt$(pkg-config --modversion Qt6Widgets)" >> "$GITHUB_OUTPUT"
 
+      # Keyed on the toolchain as well as go.sum. Go's cache entries are only
+      # good for the compiler that made them, and a key that still matched after
+      # Fedora updated Go or Qt restored a useless cache on every run and, being
+      # an exact hit, never saved a fresh one: each run then compiled MIQT cold
+      # (about ten minutes). release.yml restores this same key.
       - name: Cache Go modules and build output
         uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: fedora-go-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
-          restore-keys: fedora-go-
+          key: fedora-go-${{ steps.toolchain.outputs.key }}-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-go-${{ steps.toolchain.outputs.key }}-
 
       - name: Hold Go's cache trim
         run: bash .github/go-cache.sh hold
@@ -144,14 +155,19 @@ jobs:
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Record toolchain versions
+        id: toolchain
+        run: echo "key=$(go env GOVERSION)-gcc$(gcc -dumpversion)" >> "$GITHUB_OUTPUT"
+
+      # Keyed on the toolchain for the same reason as the check job's cache.
       - name: Cache Go modules and build output
         uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: fedora-race-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
-          restore-keys: fedora-race-
+          key: fedora-race-${{ steps.toolchain.outputs.key }}-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-race-${{ steps.toolchain.outputs.key }}-
 
       - name: Hold Go's cache trim
         run: bash .github/go-cache.sh hold

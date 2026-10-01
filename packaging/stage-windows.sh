@@ -49,11 +49,18 @@ fi
 rm -rf "$dist"
 mkdir -p "$dist"
 
-echo "==> building atlas-commander.exe"
+# Three programs from one tree. Linking a Qt program is the slow part (about 45
+# seconds each on a CI runner) and runs on one core, so the three links run side
+# by side. The packages are compiled once first: two cold builds started
+# together would each compile MIQT's C++ for themselves.
+echo "==> compiling the packages"
+CGO_ENABLED=1 go list -trimpath -export -deps ./cmd/atlas-commander >/dev/null
+
+echo "==> linking atlas-commander.exe, its console build and atlas-hook.exe"
 # -H=windowsgui detaches it from a console, so launching it does not leave a black
 # window behind — which is what a command-line program looks like.
-CGO_ENABLED=1 go build -trimpath -ldflags="-s -w -H=windowsgui" -o "$dist/atlas-commander.exe" ./cmd/atlas-commander
-
+CGO_ENABLED=1 go build -trimpath -ldflags="-s -w -H=windowsgui" -o "$dist/atlas-commander.exe" ./cmd/atlas-commander &
+gui=$!
 # ...and the same program with its console left attached.
 #
 # The cost of windowsgui is that nothing the program writes to stderr goes
@@ -61,14 +68,17 @@ CGO_ENABLED=1 go build -trimpath -ldflags="-s -w -H=windowsgui" -o "$dist/atlas-
 # application that does not start and gives no reason, so the diagnosable build
 # ships beside the normal one. It is linked from the same sources, so the staging
 # that works for one works for both.
-echo "==> building the console build"
-CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$dist/atlas-commander-console.exe" ./cmd/atlas-commander
-rm -f "$syso"
-
+CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "$dist/atlas-commander-console.exe" ./cmd/atlas-commander &
+console=$!
 # The hook helper is pure Go with no Qt, so it has no DLLs to collect. It has to
 # sit in the same folder: Commander finds it beside its own executable.
-echo "==> building atlas-hook.exe"
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$dist/atlas-hook.exe" ./cmd/atlas-hook
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$dist/atlas-hook.exe" ./cmd/atlas-hook &
+hook=$!
+# wait on each so a failed build stops the script (set -e) with its own status.
+wait "$gui"
+wait "$console"
+wait "$hook"
+rm -f "$syso"
 
 echo "==> collecting DLLs"
 # Taken from what the linker actually recorded rather than a hand-kept list. ldd

@@ -5,10 +5,13 @@ name: Windows
 # Both programs are built and staged by packaging/stage-windows.sh, the same
 # script release.yml runs.
 
+# Documentation-only pushes skip it, as in ci.yml.
 on:
   push:
     branches: [release, beta]
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
   pull_request:
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**]
   workflow_dispatch:
 
 permissions:
@@ -79,7 +82,7 @@ jobs:
         env:
           CGO_ENABLED: 0
         run: |
-          go vet ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./cmd/atlas-hook
+          go vet ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./internal/update/... ./cmd/atlas-hook
 
       - name: Test the packages that have no Qt
         env:
@@ -88,7 +91,7 @@ jobs:
           ATLAS_DATA_HOME: ${{ runner.temp }}\atlas-test\data
           ATLAS_RUNTIME_DIR: ${{ runner.temp }}\atlas-test\run
         run: |
-          go test -count=1 ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./internal/config/ ./internal/paths/ ./internal/pricing/ ./cmd/atlas-hook
+          go test -count=1 ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./internal/config/ ./internal/paths/ ./internal/pricing/ ./internal/update/... ./cmd/atlas-hook
 
       - name: Build and stage the distribution
         id: stage
@@ -106,7 +109,8 @@ jobs:
           ldd "$exe" | grep -c ucrt64 || true
 
       # A GUI exe has no console to fail on, so the console build is run for
-      # twenty seconds with its output kept. QT_QPA_PLATFORM=offscreen keeps it
+      # ten seconds with its output kept. A missing DLL or plugin fails within
+      # the first second or two, so waiting longer only costs time. QT_QPA_PLATFORM=offscreen keeps it
       # from needing a display on the runner.
       - name: Start it
         env:
@@ -118,10 +122,10 @@ jobs:
           cd "dist/${{ steps.stage.outputs.name }}"
           ./atlas-commander-console.exe > /tmp/atlas-run.log 2>&1 &
           pid=$!
-          sleep 20
+          sleep 10
           if ! kill -0 "$pid" 2>/dev/null; then
             wait "$pid" || true
-            echo "It should have stayed up for 20 seconds. Whatever it printed is below."
+            echo "It should have stayed up for 10 seconds. Whatever it printed is below."
             cat /tmp/atlas-run.log || true
             exit 1
           fi

@@ -37,16 +37,21 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      - name: Toolchain key
+        id: toolchain
+        run: echo "key=$(go env GOVERSION)-gcc$(gcc -dumpversion)-qt$(pkg-config --modversion Qt6Widgets)" >> "$GITHUB_OUTPUT"
+
       # Reuses the build cache CI saved, which is why the tag is pushed after
       # the release branch's CI run has finished: compiling MIQT cold is slow.
+      # The key must match ci.yml's.
       - name: Restore the Go build cache from CI
         uses: actions/cache/restore@v4
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: fedora-go-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
-          restore-keys: fedora-go-
+          key: fedora-go-${{ steps.toolchain.outputs.key }}-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: fedora-go-${{ steps.toolchain.outputs.key }}-
 
       - name: Hold Go's cache trim
         run: bash .github/go-cache.sh hold
