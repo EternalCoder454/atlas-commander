@@ -51,7 +51,7 @@ var (
 func Check(in Install, channel, local string) (Info, error) {
 	if in.Kind == FromSource && in.Source != "" {
 		if _, err := git(in.Source, "rev-parse", "--git-dir"); err == nil {
-			return checkGit(in.Source, channel)
+			return checkGit(in.Source, channel, in.Commit)
 		}
 	}
 	return checkRemote(channel, local)
@@ -62,8 +62,15 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func checkGit(src, channel string) (Info, error) {
+func checkGit(src, channel, installed string) (Info, error) {
 	var info Info
+	branch, _ := git(src, "rev-parse", "--abbrev-ref", "HEAD")
+	if !IsChannel(branch) {
+		// Updating would have to switch branches and leave this one behind, so
+		// the updater refuses; saying so here keeps the two in agreement.
+		info.Summary = "Your checkout is on another branch"
+		return info, nil
+	}
 	if _, err := git(src, "fetch", "--quiet", "origin", channel); err != nil {
 		return info, ErrOffline
 	}
@@ -76,9 +83,7 @@ func checkGit(src, channel string) (Info, error) {
 	}
 
 	// On another channel's branch, with nothing uncommitted: what is on offer
-	// is the move, not a newer commit. A feature branch is not a channel and
-	// is compared like any other checkout.
-	branch, _ := git(src, "rev-parse", "--abbrev-ref", "HEAD")
+	// is the move, not a newer commit.
 	dirty, _ := git(src, "status", "--porcelain")
 	if branch != channel && IsChannel(branch) && dirty == "" {
 		info.Available, info.Switch = true, true
@@ -87,7 +92,20 @@ func checkGit(src, channel string) (Info, error) {
 		return info, nil
 	}
 
-	if exec.Command("git", "-C", src, "merge-base", "--is-ancestor", "origin/"+channel, "HEAD").Run() == nil {
+	// What counts is what was built and installed, not what is checked out: if
+	// a pull worked and the build after it failed, HEAD is new and the binary
+	// is not. Without a record of the built commit, HEAD is the best guess.
+	built := "HEAD"
+	if installed != "" {
+		if _, err := git(src, "rev-parse", "--verify", "--quiet", installed+"^{commit}"); err == nil {
+			built = installed
+			local = installed
+			if len(local) > 7 {
+				local = local[:7]
+			}
+		}
+	}
+	if exec.Command("git", "-C", src, "merge-base", "--is-ancestor", "origin/"+channel, built).Run() == nil {
 		info.Summary = fmt.Sprintf("Up to date on %s (%s)", label, local)
 		return info, nil
 	}

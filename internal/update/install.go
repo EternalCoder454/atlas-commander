@@ -62,6 +62,10 @@ type Install struct {
 	Source string
 	// Binary is the running executable with symlinks resolved; "" if unknown.
 	Binary string
+	// Commit is the commit the installed binary was built from, "" if unknown.
+	// It differs from the checkout's HEAD when a pull succeeded and the build
+	// after it did not.
+	Commit string
 	// Manager and Package name the owner, for FromPackage: "pacman",
 	// "apt", "dnf", "zypper", "yum" or "rpm".
 	Manager string
@@ -182,12 +186,57 @@ func DownloadPage(channel string) string {
 // run reads its own copy.
 func SourceFile() string { return filepath.Join(paths.Data(), "source") }
 
-func sourceDir(file string) string {
+// record is what the install recipes wrote down.
+type record struct {
+	Source string // the checkout
+	Binary string // the binary that was installed; "" in a record from an older version
+	Commit string // the commit that was built; "" if git was not available
+}
+
+// readRecord parses the record: "source=", "binary=" and "commit=" lines. An
+// older install wrote just the checkout path on one line, which reads as a
+// record with no binary and no commit.
+func readRecord(file string) record {
 	b, err := os.ReadFile(file)
 	if err != nil {
-		return ""
+		return record{}
 	}
-	return strings.TrimSpace(string(b))
+	text := strings.TrimSpace(string(b))
+	if !strings.HasPrefix(text, "source=") {
+		first, _, _ := strings.Cut(text, "\n")
+		return record{Source: strings.TrimSpace(first)}
+	}
+	var r record
+	for _, line := range strings.Split(text, "\n") {
+		key, val, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "source":
+			r.Source = val
+		case "binary":
+			r.Binary = val
+		case "commit":
+			r.Commit = val
+		}
+	}
+	return r
+}
+
+// sameFile reports whether two paths name the same file once symlinks are
+// resolved.
+func sameFile(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if real, err := filepath.EvalSymlinks(a); err == nil {
+		a = real
+	}
+	if real, err := filepath.EvalSymlinks(b); err == nil {
+		b = real
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // looksLikeCheckout guards against a stale record: the checkout may have been
@@ -215,14 +264,24 @@ func Detect() Install {
 // directories and a fake package manager.
 func detect(sourceFile, exe string, owner func(path string) (manager, pkg string, ok bool)) Install {
 	in := Install{Binary: exe}
-	// A recorded checkout wins over a package owner: a developer who ran make
-	// install over a distro package has the checkout as the thing to update.
-	if src := sourceDir(sourceFile); src != "" && looksLikeCheckout(src) {
-		in.Kind, in.Source = FromSource, src
+	rec := readRecord(sourceFile)
+	var mgr, pkg string
+	var owned bool
+	if exe != "" {
+		mgr, pkg, owned = owner(exe)
+	}
+	// The record is trusted only for the binary it was written for: a distro
+	// package in /usr must not be taken for the build in ~/.local just because
+	// a checkout was once installed there. A record from before the binary was
+	// written down names none, so it is trusted unless a package owns the
+	// running binary.
+	mine := sameFile(rec.Binary, exe) || (rec.Binary == "" && !owned)
+	if mine && rec.Source != "" && looksLikeCheckout(rec.Source) {
+		in.Kind, in.Source, in.Commit = FromSource, rec.Source, rec.Commit
 		return in
 	}
 	if exe != "" {
-		if mgr, pkg, ok := owner(exe); ok {
+		if owned {
 			in.Kind, in.Manager, in.Package = FromPackage, mgr, pkg
 			return in
 		}

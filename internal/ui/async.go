@@ -36,6 +36,13 @@ func (b *bgLoad[T]) start(gen uint64, fn func() (T, error)) bool {
 	return true
 }
 
+// running reports whether a load is in flight.
+func (b *bgLoad[T]) running() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.busy
+}
+
 // take returns a finished result once. A result tagged with another gen than
 // want is discarded.
 func (b *bgLoad[T]) take(want uint64) (v T, err error, ok bool) {
