@@ -1,0 +1,30 @@
+{
+  "id": "light",
+  "name": "Light",
+  "summary": "libadwaita's own light palette",
+  "dark": false,
+  "primary": "#fafafb",
+  "secondary": "#1c71d8",
+  "colors": {
+    "window_bg_color": "#fafafb",
+    "window_fg_color": "#323237",
+    "view_bg_color": "#ffffff",
+    "view_fg_color": "#323237",
+    "sidebar_bg_color": "#ebebed",
+    "sidebar_fg_color": "#323237",
+    "headerbar_bg_color": "#ffffff",
+    "headerbar_fg_color": "#323237",
+    "card_bg_color": "#ffffff",
+    "card_fg_color": "#323237",
+    "dialog_bg_color": "#fafafb",
+    "dialog_fg_color": "#323237",
+    "popover_bg_color": "#ffffff",
+    "popover_fg_color": "#323237",
+    "accent_bg_color": "#1c71d8",
+    "accent_fg_color": "#ffffff",
+    "accent_color": "#0461be",
+    "warning_color": "#905400",
+    "error_color": "#c30000",
+    "success_color": "#007c3d"
+  }
+}

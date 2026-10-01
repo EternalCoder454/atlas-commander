@@ -1,0 +1,30 @@
+{
+  "id": "dracula",
+  "name": "Dracula",
+  "summary": "Deep grey, purple accent",
+  "dark": true,
+  "primary": "#282a36",
+  "secondary": "#bd93f9",
+  "colors": {
+    "window_bg_color": "#282a36",
+    "window_fg_color": "#f8f8f2",
+    "view_bg_color": "#21222c",
+    "view_fg_color": "#f8f8f2",
+    "sidebar_bg_color": "#21222c",
+    "sidebar_fg_color": "#f8f8f2",
+    "headerbar_bg_color": "#282a36",
+    "headerbar_fg_color": "#f8f8f2",
+    "card_bg_color": "#343746",
+    "card_fg_color": "#f8f8f2",
+    "dialog_bg_color": "#282a36",
+    "dialog_fg_color": "#f8f8f2",
+    "popover_bg_color": "#343746",
+    "popover_fg_color": "#f8f8f2",
+    "accent_bg_color": "#bd93f9",
+    "accent_fg_color": "#21222c",
+    "accent_color": "#bd93f9",
+    "warning_color": "#ffb86c",
+    "error_color": "#ff5555",
+    "success_color": "#50fa7b"
+  }
+}

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Atlas Commander
+GenericName=Agent Fleet Manager
+Comment=Run, watch and govern a fleet of Claude agents
+Exec=@BIN@
+Icon=com.atlas.Commander
+Terminal=false
+Categories=Development;Qt;
+Keywords=claude;agent;agents;fleet;ai;approvals;tasks;
+StartupNotify=true
+StartupWMClass=com.atlas.Commander

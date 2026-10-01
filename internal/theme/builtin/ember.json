@@ -1,0 +1,30 @@
+{
+  "id": "ember",
+  "name": "Ember",
+  "summary": "Warm dark, no blue light",
+  "dark": true,
+  "primary": "#1c1917",
+  "secondary": "#e8913a",
+  "colors": {
+    "window_bg_color": "#1c1917",
+    "window_fg_color": "#ede4dc",
+    "view_bg_color": "#231f1d",
+    "view_fg_color": "#ede4dc",
+    "sidebar_bg_color": "#211d1b",
+    "sidebar_fg_color": "#ede4dc",
+    "headerbar_bg_color": "#1c1917",
+    "headerbar_fg_color": "#ede4dc",
+    "card_bg_color": "#2a2523",
+    "card_fg_color": "#ede4dc",
+    "dialog_bg_color": "#231f1d",
+    "dialog_fg_color": "#ede4dc",
+    "popover_bg_color": "#2a2523",
+    "popover_fg_color": "#ede4dc",
+    "accent_bg_color": "#e8913a",
+    "accent_fg_color": "#1c1917",
+    "accent_color": "#e8913a",
+    "warning_color": "#e0a458",
+    "error_color": "#d4675a",
+    "success_color": "#a3a55c"
+  }
+}

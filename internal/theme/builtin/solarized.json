@@ -1,0 +1,30 @@
+{
+  "id": "solarized",
+  "name": "Solarized",
+  "summary": "The classic light palette, teal accent",
+  "dark": false,
+  "primary": "#fdf6e3",
+  "secondary": "#1f7f78",
+  "colors": {
+    "window_bg_color": "#fdf6e3",
+    "window_fg_color": "#073642",
+    "view_bg_color": "#fffdf6",
+    "view_fg_color": "#073642",
+    "sidebar_bg_color": "#eee8d5",
+    "sidebar_fg_color": "#073642",
+    "headerbar_bg_color": "#eee8d5",
+    "headerbar_fg_color": "#073642",
+    "card_bg_color": "#fffdf6",
+    "card_fg_color": "#073642",
+    "dialog_bg_color": "#fdf6e3",
+    "dialog_fg_color": "#073642",
+    "popover_bg_color": "#fffdf6",
+    "popover_fg_color": "#073642",
+    "accent_bg_color": "#1f7f78",
+    "accent_fg_color": "#ffffff",
+    "accent_color": "#1a6f69",
+    "warning_color": "#8a6800",
+    "error_color": "#c42b28",
+    "success_color": "#5f6e00"
+  }
+}

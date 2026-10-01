@@ -4,3 +4,11 @@
 *.test
 *.prof
 *.syso
+
+# Release and Windows packaging output (packaging/stage-windows.sh, release.yml)
+/dist/
+
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store

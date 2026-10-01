@@ -3,9 +3,9 @@
 // happens as a stream of Events.
 //
 // The fleet supervisor and the UI only ever see these types. Claude Code and
-// the raw Claude API are the v1 backends (packages claudecode and claudeapi);
-// another provider can be added later by implementing Backend, without the UI
-// changing. The interface stays internal until the v2 plugin API.
+// the chat providers OpenAI, Gemini and Local (Ollama) are the v1 backends
+// (packages claudecode and chat); another provider can be added later by
+// implementing Backend, without the UI changing. The interface stays internal until the v2 plugin API.
 package agent
 
 import (
@@ -18,7 +18,9 @@ import (
 // Never rename one: existing agents would lose their backend.
 const (
 	BackendClaudeCode = "claude-code"
-	BackendClaudeAPI  = "claude-api"
+	BackendOpenAI     = "openai"
+	BackendGemini     = "gemini"
+	BackendLocal      = "local"
 )
 
 // Backend starts sessions. Implementations must be safe for concurrent use;
@@ -39,7 +41,7 @@ type Spec struct {
 	WorkDir string // absolute; the agent's own directory or git worktree
 
 	// SystemPrompt is the agent's pinned prompt. Claude Code appends it to
-	// its own system prompt; the API backend sends it as the system prompt.
+	// its own system prompt; chat backends send it as the system prompt.
 	SystemPrompt string
 
 	// Prompt is the first user message. Empty starts the session idle,
@@ -57,8 +59,10 @@ type Spec struct {
 
 // Session is one running conversation with one agent.
 //
-// Send, Stop and Kill may be called from any goroutine. Events is closed
-// after the final EventExit, and only then; a consumer can range over it.
+// Send, Stop and Kill may be called from any goroutine, including while
+// nobody is draining Events: they must still return (events may then be
+// dropped, except the final EventExit). Events is closed after the final
+// EventExit, and only then; a consumer can range over it.
 type Session interface {
 	// Send delivers a user message: a new task, or a redirect mid-task.
 	// Claude Code queues it until the current turn reaches a safe point.
@@ -69,7 +73,7 @@ type Session interface {
 	// Kill ends the session and every process it started, at once.
 	Kill() error
 	// Events is the session's event stream. It is buffered; a slow reader
-	// delays the session but never loses events.
+	// delays the session but loses no events until Stop or Kill is called.
 	Events() <-chan Event
 }
 
@@ -89,8 +93,10 @@ const (
 	// event only, never a running total, so the supervisor can sum them.
 	EventUsage
 	// EventResult: a turn ended. IsError, Text (the final answer or the
-	// error), CostUSD (as the backend reports it, 0 if it doesn't),
-	// Duration, Turns.
+	// error), CostUSD (this turn only, 0 if the backend doesn't know it),
+	// Duration, Turns. A failed turn is reported by one EventResult with
+	// IsError true and the message in Text; backends do not also send
+	// EventError for it.
 	EventResult
 	// EventError: something went wrong that did not end the session
 	// (rate limit, transient API error). Text is set.
@@ -137,7 +143,10 @@ type Event struct {
 	ToolUseID string
 	IsError   bool
 
-	Usage    Usage
+	Usage Usage
+	// CostUSD is the cost of this turn only (on EventResult), or 0 if the
+	// backend does not know it. Claude Code reports it; the chat backends
+	// leave it 0 and the supervisor prices Usage itself.
 	CostUSD  float64
 	Duration time.Duration
 	Turns    int

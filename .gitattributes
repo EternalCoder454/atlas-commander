@@ -1,0 +1,6 @@
+# Keep shell scripts and the desktop entry on LF even when checked out on Windows.
+*.sh text eol=lf
+*.desktop text eol=lf
+packaging/PKGBUILD text eol=lf
+packaging/*.spec text eol=lf
+*.rc.in text eol=lf

@@ -1,0 +1,81 @@
+Atlas Commander
+Copyright (c) EternalCoder454
+
+This product includes third-party material, listed below. Atlas Commander's own
+source is covered by LICENSE; the terms here apply only to the material named.
+
+--------------------------------------------------------------------------------
+Material Symbols
+--------------------------------------------------------------------------------
+
+The icons in internal/ui/icons/ are Material Symbols by Google, used under the
+Apache License, Version 2.0, taken from Atlas Monitor's and Atlas Notes' sets.
+
+    https://fonts.google.com/icons
+    https://github.com/google/material-design-icons
+
+    Copyright (c) Google LLC
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use these files except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+The files are renamed from the originals; Commander recolours them when it
+draws them. The artwork itself is unchanged. Exceptions, covered by LICENSE
+instead: atlas.svg (Commander's own mark) and startup.svg (drawn for Atlas
+Monitor).
+
+--------------------------------------------------------------------------------
+Qt 6
+--------------------------------------------------------------------------------
+
+Atlas Commander uses the Qt 6 toolkit (Core, Gui, Widgets and the SVG module),
+licensed under the GNU Lesser General Public License version 3 (LGPLv3).
+
+    https://www.qt.io/
+    https://www.gnu.org/licenses/lgpl-3.0.html
+
+Qt is linked dynamically and never modified. On Linux it is the copy your
+distribution provides. The Windows zip carries the Qt DLLs and plugins as
+separate files beside the executable, so you can replace them with another build
+of the same Qt version. The Qt source code is available from https://download.qt.io/
+and, for the MSYS2 build shipped here, from https://packages.msys2.org/.
+
+--------------------------------------------------------------------------------
+MIQT
+--------------------------------------------------------------------------------
+
+The Go bindings for Qt, github.com/mappu/miqt, used under the MIT License.
+
+    Copyright (c) the MIQT authors
+
+--------------------------------------------------------------------------------
+modernc.org/sqlite
+--------------------------------------------------------------------------------
+
+The pure-Go SQLite driver, modernc.org/sqlite, used under the BSD 3-Clause
+License. It carries SQLite itself, which is in the public domain, and the
+modernc.org/libc runtime, under the same BSD 3-Clause License.
+
+    Copyright (c) the modernc.org/sqlite Authors. All rights reserved.
+
+The module dependencies that the driver brings in each carry their own
+permissive licence (MIT, BSD or Apache 2.0); their notices are in their module
+sources, which `go mod download` fetches.
+
+--------------------------------------------------------------------------------
+rsc.io/qr
+--------------------------------------------------------------------------------
+
+The QR code encoder, rsc.io/qr, used under the BSD 3-Clause License. It draws
+the pairing code in Settings, Phone.
+
+    Copyright (c) 2009 The Go Authors. All rights reserved.

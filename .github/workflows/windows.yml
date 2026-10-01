@@ -1,0 +1,148 @@
+name: Windows
+
+# Builds the Windows distribution on every push, so a break in the Qt DLL
+# staging shows up on the branch and not for the first time at release.
+# Both programs are built and staged by packaging/stage-windows.sh, the same
+# script release.yml runs.
+
+# Documentation-only pushes skip it, as in ci.yml.
+on:
+  push:
+    branches: [release, beta]
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**, android/**]
+  pull_request:
+    paths-ignore: [docs/**, README.md, SPEC.md, images/**, android/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: exe
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      GOFLAGS: -trimpath
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-go
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-svg
+            git
+            zip
+
+      # The cache step keeps these two directories, so Go is told to use them.
+      - name: Put Go's caches where the cache step keeps them
+        run: |
+          temp="$(cygpath -w "$RUNNER_TEMP")"
+          echo "GOCACHE=$temp\\go-build" >> "$GITHUB_ENV"
+          echo "GOMODCACHE=$temp\\go-mod" >> "$GITHUB_ENV"
+
+      - name: What we are building against
+        id: toolchain
+        run: |
+          go version
+          gcc --version | head -1
+          pkg-config --modversion Qt6Widgets
+          echo "key=$(go env GOVERSION)-gcc$(gcc -dumpversion)-qt$(pkg-config --modversion Qt6Widgets)" >> "$GITHUB_OUTPUT"
+
+      # Keyed on the toolchain: a compiled MIQT is only good for the Qt and
+      # compiler it was built against.
+      - name: Cache Go modules and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/go-build
+            ${{ runner.temp }}/go-mod
+          key: windows-go-${{ steps.toolchain.outputs.key }}-${{ hashFiles('go.sum', '.github/go-cache.sh') }}
+          restore-keys: windows-go-${{ steps.toolchain.outputs.key }}-
+
+      - name: Hold Go's cache trim
+        run: bash .github/go-cache.sh hold
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$(pwd)"
+
+      - name: Vet the packages that have no Qt
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go vet ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./internal/update/... ./cmd/atlas-hook
+
+      - name: Test the packages that have no Qt
+        env:
+          CGO_ENABLED: 0
+          ATLAS_CONFIG_HOME: ${{ runner.temp }}\atlas-test\config
+          ATLAS_DATA_HOME: ${{ runner.temp }}\atlas-test\data
+          ATLAS_RUNTIME_DIR: ${{ runner.temp }}\atlas-test\run
+        run: |
+          go test -count=1 ./internal/agent/... ./internal/procgroup/... ./internal/gate/... ./internal/store/... ./internal/config/ ./internal/paths/ ./internal/pricing/ ./internal/update/... ./cmd/atlas-hook
+
+      - name: Build and stage the distribution
+        id: stage
+        env:
+          CGO_ENABLED: 1
+        run: |
+          bash packaging/stage-windows.sh
+          echo "name=atlas-commander-$(cat VERSION)-windows-x86_64" >> "$GITHUB_OUTPUT"
+
+      - name: What it links against
+        run: |
+          exe="dist/${{ steps.stage.outputs.name }}/atlas-commander.exe"
+          ldd "$exe" | sort
+          echo "---- count ----"
+          ldd "$exe" | grep -c ucrt64 || true
+
+      # A GUI exe has no console to fail on, so the console build is run for
+      # ten seconds with its output kept. A missing DLL or plugin fails within
+      # the first second or two, so waiting longer only costs time. QT_QPA_PLATFORM=offscreen keeps it
+      # from needing a display on the runner.
+      - name: Start it
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ATLAS_CONFIG_HOME: ${{ runner.temp }}\atlas-run\config
+          ATLAS_DATA_HOME: ${{ runner.temp }}\atlas-run\data
+          ATLAS_RUNTIME_DIR: ${{ runner.temp }}\atlas-run\run
+        run: |
+          cd "dist/${{ steps.stage.outputs.name }}"
+          ./atlas-commander-console.exe > /tmp/atlas-run.log 2>&1 &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" || true
+            echo "It should have stayed up for 10 seconds. Whatever it printed is below."
+            cat /tmp/atlas-run.log || true
+            exit 1
+          fi
+          kill "$pid" 2>/dev/null || true
+          echo "---- what it said ----"
+          cat /tmp/atlas-run.log || echo "(nothing on stdout or stderr)"
+          if grep -qiE "entry point|cannot find|could not find the Qt platform plugin|not found|No such file" /tmp/atlas-run.log; then
+            echo "A LIBRARY OR PLUGIN DID NOT RESOLVE — the Qt staging is incomplete"
+            exit 1
+          fi
+          echo "none of the packaging failures appeared"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.name }}
+          path: dist/*.zip*
+          if-no-files-found: error
+
+      - name: Prune the Go build cache
+        run: bash .github/go-cache.sh prune

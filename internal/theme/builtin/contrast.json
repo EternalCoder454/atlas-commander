@@ -1,0 +1,30 @@
+{
+  "id": "contrast",
+  "name": "Contrast",
+  "summary": "Black and white, yellow accent",
+  "dark": true,
+  "primary": "#000000",
+  "secondary": "#ffd60a",
+  "colors": {
+    "window_bg_color": "#000000",
+    "window_fg_color": "#ffffff",
+    "view_bg_color": "#0a0a0a",
+    "view_fg_color": "#ffffff",
+    "sidebar_bg_color": "#0f0f0f",
+    "sidebar_fg_color": "#ffffff",
+    "headerbar_bg_color": "#000000",
+    "headerbar_fg_color": "#ffffff",
+    "card_bg_color": "#161616",
+    "card_fg_color": "#ffffff",
+    "dialog_bg_color": "#0a0a0a",
+    "dialog_fg_color": "#ffffff",
+    "popover_bg_color": "#161616",
+    "popover_fg_color": "#ffffff",
+    "accent_bg_color": "#ffd60a",
+    "accent_fg_color": "#000000",
+    "accent_color": "#ffd60a",
+    "warning_color": "#ff9f1a",
+    "error_color": "#ff6b6b",
+    "success_color": "#3ddc84"
+  }
+}
