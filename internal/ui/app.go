@@ -123,6 +123,11 @@ func New(o Options) *App {
 	qt.QGuiApplication_SetDesktopFileName("com.atlas.Commander")
 	a.qapp = qt.NewQApplication(os.Args)
 	qt.QApplication_SetStyleWithStyle("Fusion")
+	// Menus and dropdown lists get the same rounded corners as the window,
+	// and only where the window can be translucent too.
+	if transparencyPlatform() {
+		qtx.RoundPopups()
+	}
 
 	a.mono = loadFonts(a.settings.MonoFont)
 	theme.IndicatorDir = filepath.Join(paths.Runtime(), "style")
@@ -432,6 +437,10 @@ func (a *App) buildHeader() *qt.QWidget {
 	a.header.killAll = qt.NewQPushButton3("Kill all")
 	a.header.killAll.SetProperty("danger", qt.NewQVariant8(true))
 	a.header.killAll.SetToolTip("Stop every running agent at once")
+	// A click doesn't leave the focus ring on it: the button usually disables
+	// itself once the agents are gone, and a ring round a destructive button
+	// reads as an invitation to press Enter. Tab still reaches it.
+	a.header.killAll.SetFocusPolicy(qt.TabFocus)
 	a.header.killAll.OnClicked(a.confirmKillAll)
 	l.AddWidget(a.header.killAll.QWidget)
 

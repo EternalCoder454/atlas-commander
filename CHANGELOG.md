@@ -9,6 +9,9 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Existing setups keep the Advanced layout
 - Smoother pages and sidebar, and running agents' status dots gently pulse (they follow your desktop's animation setting)
 - The Board's summary line no longer runs under the New agent button in a narrow window
+- Menus and dropdown lists have rounded corners, and dropdowns open below the choice
+- The Dispatch to… button shows a proper arrow
+- Kill all no longer keeps a focus outline after you click it
 
 ## 0.1.0
 

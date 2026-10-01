@@ -180,6 +180,13 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 	w("QPushButton:pressed, QToolButton:pressed { background-color: %s; }\n", press)
 	w("QPushButton:disabled, QToolButton:disabled { background-color: %s; color: %s; }\n", winFg.rgba(0.04), winFg.rgba(0.4))
 	w("QPushButton:focus, QToolButton:focus { border: 1px solid %s; }\n", h("accent_bg_color"))
+	// A button that opens a menu shows the dropdown's chevron, not Fusion's
+	// few-pixel arrow, with room kept for it on the right.
+	if IndicatorDir != "" {
+		w("QPushButton::menu-indicator { image: url(%s); width: 16px; height: 16px; subcontrol-origin: padding; subcontrol-position: center right; right: %dpx; }\n", chevronPath(h("window_fg_color")), pad-2)
+		w("QPushButton::menu-indicator:disabled { image: url(%s); }\n", dimChevronPath(h("window_fg_color")))
+		w("QPushButton[menu=\"true\"] { padding-right: %dpx; }\n", pad*2+12)
+	}
 	w("QPushButton[accent=\"true\"] { background-color: %s; color: %s; }\n", h("accent_bg_color"), h("accent_fg_color"))
 	w("QPushButton[accent=\"true\"]:hover { background-color: %s; }\n", over(mustHex(h("accent_fg_color")), accent, 0.12).hex())
 	w("QPushButton[accent=\"true\"]:pressed { background-color: %s; }\n", over(mustHex(h("accent_fg_color")), accent, 0.2).hex())
@@ -190,6 +197,7 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 	w("QPushButton[danger=\"true\"] { background-color: %s; color: %s; }\n", c("error_color").rgba(0.15), h("error_color"))
 	w("QPushButton[danger=\"true\"]:hover { background-color: %s; }\n", c("error_color").rgba(0.25))
 	w("QPushButton[danger=\"true\"]:disabled { background-color: %s; color: %s; }\n", winFg.rgba(0.04), winFg.rgba(0.4))
+	w("QPushButton[danger=\"true\"]:focus { border: 1px solid %s; }\n", h("error_color"))
 
 	// Inputs.
 	in := fmt.Sprintf("background-color: %s; color: %s; border: %s; border-radius: %dpx; padding: %dpx %dpx; selection-background-color: %s; selection-color: %s;",
@@ -205,9 +213,18 @@ func QSS(t Theme, m Metrics, uiFont, monoFont string, fontPt int, g Glass) strin
 	w("QComboBox::drop-down { border: none; width: %dpx; subcontrol-origin: padding; subcontrol-position: center right; }\n", pad*2+4)
 	if IndicatorDir != "" {
 		w("QComboBox::down-arrow { image: url(%s); width: 16px; height: 16px; }\n", chevronPath(h("window_fg_color")))
+		w("QComboBox::down-arrow:disabled { image: url(%s); }\n", dimChevronPath(h("window_fg_color")))
 	}
-	w("QComboBox QAbstractItemView { background-color: %s; color: %s; border: %s; selection-background-color: %s; selection-color: %s; outline: 0; }\n",
-		h("popover_bg_color"), h("popover_fg_color"), hair, sel, h("popover_fg_color"))
+	// The open list matches a menu: rounded, inset, rows rounded within it.
+	// The padding keeps the list's square viewport inside the curve. Where
+	// popups can't be translucent the corners just fill in, as a menu's do.
+	// combobox-popup: 0 drops the list below the choice, as Monitor's does,
+	// instead of Fusion's menu-style popup, whose square panel ignores the
+	// style sheet and shows behind the rounded list.
+	w("QComboBox { combobox-popup: 0; }\n")
+	w("QComboBox QAbstractItemView { background-color: %s; color: %s; border: %s; border-radius: %dpx; padding: 4px; selection-background-color: %s; selection-color: %s; outline: 0; }\n",
+		h("popover_bg_color"), h("popover_fg_color"), hair, rs+2, sel, h("popover_fg_color"))
+	w("QComboBox QAbstractItemView::item { min-height: 0; padding: %dpx %dpx; border-radius: %dpx; }\n", pad/2+2, pad, rs)
 	w("QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { border: none; width: %dpx; background: transparent; }\n", pad*2)
 	w("QCheckBox, QRadioButton { spacing: %dpx; background: transparent; }\n", pad)
 	// Indicators: a rounded box that fills with the accent and shows a tick.

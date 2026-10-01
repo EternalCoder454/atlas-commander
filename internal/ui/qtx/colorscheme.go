@@ -1,6 +1,7 @@
 // Package qtx holds the few Qt calls MIQT does not bind. MIQT v0.14 is
 // generated against Qt 6.4, and QStyleHints::colorScheme arrived in 6.5, so
-// following the system's light/dark choice needs this small C++ shim.
+// following the system's light/dark choice needs a small C++ shim; so does
+// the event filter that gives popups their rounded corners.
 //
 // Everything here must be called on the Qt main thread after the
 // QApplication exists.
