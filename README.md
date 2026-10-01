@@ -73,6 +73,21 @@ it anywhere and run `atlas-commander.exe`. The zip carries Qt and everything it
 needs. If it does not start, run `atlas-commander-console.exe` from a terminal in
 the same folder to see why. Keep `atlas-hook.exe` next to it.
 
+## Updating
+
+Settings has an Updates section: it shows whether your channel (Release or Beta)
+has something newer, and Commander checks once when it opens unless you turn
+that off. A small "Update available" button appears in the header when there is
+an update. What it does next depends on how you installed:
+
+- **Built from source** (`setup.sh`, `make install` or `just install`): it pulls
+  the channel, rebuilds, reinstalls and restarts. `scripts/update.sh` does the
+  work and never touches a checkout with uncommitted changes. Its log is in
+  `~/.local/state/atlas-commander/update.log`.
+- **Installed by a package manager**: it shows the command to run.
+- **Release tarball or Windows zip**: it opens the releases page. Windows can't
+  replace a program that is running.
+
 ## How approvals work
 
 Commander starts Claude Code headless and registers `atlas-hook` as its

@@ -12,3 +12,5 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Analytics for cost, tokens and success rate, and an audit log that can only be added to
 - Observed view of Claude Code sessions you started somewhere else, read-only
 - Themes, with a theme editor; runs on Linux and Windows
+- Updates: Commander checks for a newer version when it opens and can update itself when built from source
+- Settings has an Updates section to check now, pick the Release or Beta channel, or turn the check off
