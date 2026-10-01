@@ -3,7 +3,7 @@
 Written for the people who use Atlas Commander rather than the people who build
 it. One short line per change, no jargon — this is what the update prompt shows.
 
-## 0.1.0-beta
+## 0.1.0
 
 - First beta: run a fleet of Claude agents and watch them all from one window
 - A Board of every agent with its status, model, cost and last tool call
@@ -18,3 +18,4 @@ it. One short line per change, no jargon — this is what the update prompt show
 - Updates: Commander checks for a newer version when it opens and can update itself when built from source
 - Settings has an Updates section to check now, pick the Release or Beta channel, or turn the check off
 - Phone access, off until you turn it on in Settings: watch your agents and answer approvals from your phone
+- An Android app to pair with Commander: see the board, read transcripts, and allow or deny approvals from a notification
